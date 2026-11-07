@@ -30,7 +30,8 @@ def related_choice(artist, title, other_artist, other_title):
     This is NOT identity evidence. match_evidence still tests the whole credit.
     An unrelated artist, an omitted remix or a different song is never offered.
     """
-    if same_track(artist, title, other_artist, other_title):
+    from core.cover_query import same_cover_track
+    if same_cover_track(artist, title, other_artist, other_title):
         return True
     if not same_track(artist, title, artist, other_title):
         return False

@@ -1,4 +1,5 @@
 """Isolated adapter: the CLI engine remains authoritative for every decision."""
+import base64
 import copy
 import builtins
 import json
@@ -80,7 +81,7 @@ builtins.input = ask
 
 def main():
     global library_cache
-    emit('started', pid=os.getpid(), ui_api_version=48)
+    emit('started', pid=os.getpid(), ui_api_version=51)
     request = json.loads(sys.stdin.readline())
     from core.library_cache import LibraryCache
     library_cache = LibraryCache(ROOT/'ui_runtime/library.sqlite3')
@@ -261,6 +262,7 @@ def main():
                 backup_session = create_backup_session(ROOT) if action == 'cover_commit' else None
                 write_downloads = BatchArtworkDownloads() if action == 'cover_commit' else None
                 updates = []
+                queue_only = action in ('cover_queue', 'cover_unqueue')
                 last_update = 0.0
                 cancelled=lambda:(ROOT/'ui_runtime/cover_stop').exists()
                 context=CoverSearchBatch(results,indices,command.get('query') if action=='cover_search' else None,
@@ -293,10 +295,11 @@ def main():
                             elif action in ('cover_queue', 'cover_unqueue'):
                                 choice = command.get('choice_key') if action == 'cover_queue' else None
                                 options = {key: command[key] for key in ('review_confirmed', 'upscale_small', 'crop_square', 'crop_position') if key in command}
+                                if choice not in (None, 'current'):
+                                    options['original_blob'] = base64.b64decode(command['original_image'], validate=True)
                                 covers.set_queued(data, choice, **options)
                                 marked_paths.append(data['path'])
                             elif action == 'cover_import':
-                                import base64
                                 candidate=covers.import_image(data,base64.b64decode(command['image'],validate=True),command.get('origin','file'))
                                 imported_choices[data['path']]=candidate['choice_key']
                             else:
@@ -310,7 +313,10 @@ def main():
                                     if written_store is not None and data.get('_ui_written'): written_store.save_batch([data])
                                 except Exception as error:
                                     emit('warning', message='Обложка вшита, но не удалось обновить данные редактора: '+str(error))
-                            updates.append({'index': index, 'item': data})
+                            if queue_only:
+                                updates.append({'index': index, 'cover': data.get('_ui_cover') or {}})
+                            else:
+                                updates.append({'index': index, 'item': data})
                         except Exception as error:
                             failures.append(data.get('file','') + ': ' + str(error))
                             if writing:
@@ -322,10 +328,13 @@ def main():
                                         emit('warning',message='Исходный файл восстановлен, но отметки не удалось обновить: '+str(persistence_error))
                                 if action == 'cover_commit' and data.get('_ui_cover'):
                                     data['_ui_cover']['write_error'] = str(error)
+                            if not queue_only:
                                 updates.append({'index': index, 'item': data})
                         processed += 1
                         if updates and (len(indices) <= 8 or len(updates) >= 8 or time.monotonic() - last_update >= 1):
-                            if len(updates) == 1:
+                            if queue_only:
+                                emit('cover_queue_updates', updates=updates)
+                            elif len(updates) == 1:
                                 emit('cover_updated', **updates[0])
                             else:
                                 emit('cover_updates', updates=updates)
@@ -333,7 +342,7 @@ def main():
                             last_update = time.monotonic()
                         emit('progress', stage='cover_write' if writing else 'cover_search', file=data.get('file',''),details={'done':processed,'total':len(indices),'errors':len(failures)})
                 if updates:
-                    emit('cover_updates', updates=updates)
+                    emit('cover_queue_updates' if queue_only else 'cover_updates', updates=updates)
                 if uniformity.active and written_paths:
                     try:
                         uniformity.recompute(results, changed_paths=written_paths)

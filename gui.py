@@ -1,14 +1,17 @@
 """TagCleaner local UI. Bind only to loopback; all mutations require a token."""
 import json
+import hashlib
 import uuid
 import os
 import re
 import secrets
+import sqlite3
 import subprocess
 import sys
 import threading
 import time
 import webbrowser
+from collections import OrderedDict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -18,15 +21,123 @@ sys.path.insert(0, str(ROOT))
 PYTHON = str(ROOT / '.venv-audio' / 'Scripts' / 'python.exe') if getattr(sys, 'frozen', False) else sys.executable
 os.chdir(ROOT)
 TOKEN = secrets.token_urlsafe(32)
-UI_API_VERSION = 48
-UI_BUILD = '2026.11.07-cover-queue'
+UI_API_VERSION = 51
+UI_BUILD = '2026.11.08-cover-preview-recovery'
 STATE = {'phase':'idle', 'message':'Выберите папку с музыкой', 'done':0, 'total':0,
          'files':[], 'results':[], 'roots':[], 'undo_delete':'', 'prompt':None, 'operations':[], 'log':[],
          'ui_api_version':UI_API_VERSION, 'ui_build':UI_BUILD}
 LOCK = threading.RLock()
+COVER_ROW_CHANGES = deque(maxlen=64)
 PROCESS = None
 DELETE_PLAN = None
 STOP_GRACE_SECONDS = 15
+PREVIEW_TIMEOUT = 45
+PREVIEW_LIMIT = 32 * 1024 * 1024
+PREVIEW_LOCK = threading.Lock()
+PREVIEW_IMAGES = OrderedDict()
+PREVIEW_LOADING = {}
+PREVIEW_NETWORK = threading.BoundedSemaphore(3)
+
+
+def remember_preview(key, blob):
+    with PREVIEW_LOCK:
+        PREVIEW_IMAGES[key] = blob
+        PREVIEW_IMAGES.move_to_end(key)
+        while len(PREVIEW_IMAGES) > 16 or sum(map(len, PREVIEW_IMAGES.values())) > PREVIEW_LIMIT:
+            PREVIEW_IMAGES.popitem(last=False)
+
+
+def recover_preview(cache_key, candidate):
+    """Share an in-flight request for the same original and source."""
+    source = (*cache_key, candidate.get('image_url'))
+    with PREVIEW_LOCK:
+        if cache_key in PREVIEW_IMAGES:
+            PREVIEW_IMAGES.move_to_end(cache_key)
+            return PREVIEW_IMAGES[cache_key]
+        pending = PREVIEW_LOADING.get(source)
+        owner = pending is None
+        if owner:
+            pending = {'done': threading.Event()}
+            PREVIEW_LOADING[source] = pending
+    if not owner:
+        if not pending['done'].wait(PREVIEW_TIMEOUT + 8):
+            raise ValueError('Истекло время загрузки оригинала обложки.')
+        if 'error' in pending:
+            raise ValueError(pending['error'])
+        return pending['blob']
+
+    try:
+        if not PREVIEW_NETWORK.acquire(timeout=6):
+            raise ValueError('Сейчас загружаются другие оригиналы. Повторите попытку.')
+        try:
+            request = {k: candidate.get(k) for k in ('id', 'image_url', 'upscale')}
+            restored = subprocess.run(
+                [PYTHON, '-X', 'utf8', '-m', 'core.cover_image_restore'],
+                input=json.dumps(request).encode('utf-8'), cwd=ROOT, capture_output=True,
+                timeout=PREVIEW_TIMEOUT, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            )
+        finally:
+            PREVIEW_NETWORK.release()
+        if restored.returncode:
+            message = restored.stderr.decode('utf-8', errors='replace').strip()
+            raise ValueError(message or 'Не удалось загрузить оригинал обложки.')
+        blob = restored.stdout
+        if hashlib.sha256(blob).hexdigest() != candidate['id']:
+            raise ValueError('Изображение источника изменилось. Обновите варианты.')
+        remember_preview(cache_key, blob)
+        pending['blob'] = blob
+        return blob
+    except subprocess.TimeoutExpired:
+        pending['error'] = 'Истекло время загрузки оригинала обложки.'
+        raise ValueError(pending['error']) from None
+    except Exception as error:
+        pending['error'] = str(error)
+        raise
+    finally:
+        with PREVIEW_LOCK:
+            PREVIEW_LOADING.pop(source, None)
+            pending['done'].set()
+
+
+def candidate_preview(track_path, state, candidate):
+    from core.covers import pictures, queued_image
+    from core.storage import touch_artwork
+    from mutagen import File
+
+    key = candidate['id']
+    cache_key = (ROOT, key)
+    with PREVIEW_LOCK:
+        blob = PREVIEW_IMAGES.get(cache_key)
+        if blob is not None:
+            PREVIEW_IMAGES.move_to_end(cache_key)
+            return blob
+    path = ROOT/'cache/covers'/(key+'.image')
+    try:
+        blob = path.read_bytes()
+        if hashlib.sha256(blob).hexdigest() == key:
+            touch_artwork(path)
+            remember_preview(cache_key, blob)
+            return blob
+    except OSError:
+        pass
+    if state.get('queued'):
+        try:
+            blob = queued_image(ROOT, track_path)
+            if blob and hashlib.sha256(blob).hexdigest() == key:
+                remember_preview(cache_key, blob)
+                return blob
+        except sqlite3.Error:
+            pass
+    if state.get('status') == 'ready' and state.get('current_id') in (None, key):
+        try:
+            embedded = pictures(File(track_path))
+            if embedded and hashlib.sha256(embedded[0]).hexdigest() == key:
+                remember_preview(cache_key, embedded[0])
+                return embedded[0]
+        except Exception:
+            # The independently verified catalog original is still usable.
+            pass
+    return recover_preview(cache_key, candidate)
 
 def send(data):
     if PROCESS is None or PROCESS.poll() is not None: raise ValueError('Процесс проверки недоступен')
@@ -98,13 +209,17 @@ def observe(process):
                     STATE['results'][e['index']]=e['item']
                     STATE['results_revision']=STATE.get('results_revision',0)+1
                     STATE.update(phase='ready',action_error=None,message='Поиск изданий завершён.',release_search_warnings=e.get('warnings',[]))
-                elif kind=='cover_updated':
-                    STATE['results'][e['index']]=e['item']
-                    STATE['results_revision']=STATE.get('results_revision',0)+1
-                elif kind=='cover_updates':
-                    for update in e['updates']:
-                        STATE['results'][update['index']] = update['item']
-                    STATE['results_revision'] = STATE.get('results_revision', 0) + 1
+                elif kind in ('cover_updated', 'cover_updates', 'cover_queue_updates'):
+                    updates = [e] if kind == 'cover_updated' else e['updates']
+                    for update in updates:
+                        index = update['index']
+                        if kind == 'cover_queue_updates':
+                            STATE['results'][index]['_ui_cover'] = update['cover']
+                        else:
+                            STATE['results'][index] = update['item']
+                    revision = STATE.get('results_revision', 0) + 1
+                    STATE['results_revision'] = revision
+                    COVER_ROW_CHANGES.append((revision, tuple(update['index'] for update in updates)))
                 elif kind=='cover_done':
                     STATE.update(phase='ready',message=e['message'],action_error=None,cover_running=False)
                     STATE['cover_operation_revision']=STATE.get('cover_operation_revision',0)+1
@@ -155,7 +270,7 @@ def observe(process):
                 elif kind=='export': STATE['export']=e['path']
                 elif kind in ('error','stopped'): STATE.update(phase=kind, message=e.get('message',''), prompt=None,local_operation=None,refresh_requested=False)
                 # Keep compact events; raw evidence lives in the TXT/JSON report.
-                if kind not in ('results','results_chunk','results_complete','edited','written','cover_updated','cover_updates','progress','collection_synced','audit_report') or e.get('stage') in ('shazam_transport','fingerprint_failed'):
+                if kind not in ('results','results_chunk','results_complete','edited','written','cover_updated','cover_updates','cover_queue_updates','progress','collection_synced','audit_report') or e.get('stage') in ('shazam_transport','fingerprint_failed'):
                     event={k:v for k,v in e.items() if k not in ('written_paths','marked_paths')} if kind=='cover_done' else e
                     STATE['log']=(STATE['log']+[event])[-40:]
     except Exception as error:
@@ -522,6 +637,45 @@ def local_action(action,data):
     background(run)
 
 
+def result_row(item):
+    from ui.editor import draft_matches_current, has_preview_work
+
+    row = {key: item.get(key) for key in ('file','path','artist','title','remixer','_checkpoint_retry_required')}
+    cover = item.get('_ui_cover') or {'status': 'pending'}
+    row['cover'] = {key: value for key, value in cover.items() if key in (
+        'status','message','verification','manual_decision','confirmed_embedded','queued','write_error',
+        'changed','changed_at','change_kind','checked_at','diagnosis_outcome')}
+    row['cover']['candidate_count'] = len(cover.get('candidates') or [])
+    row['audit'] = item.get('_ui_audit') if STATE.get('audit_summary') is not None else None
+    row['manual_draft'] = bool(item.get('_ui_draft'))
+    row['draft_matches_file'] = draft_matches_current(item)
+    row['draft_values'] = (item.get('_ui_draft') or {}).get('values')
+    row['draft_warning'] = item.get('_ui_draft_warning')
+    row['written'] = bool(item.get('_ui_written'))
+    row['completion_kind'] = item.get('_ui_completion_kind', 'write')
+    row['write_recheck_required'] = bool(item.get('_ui_write_recheck_required'))
+    row['write_pending'] = has_preview_work(item)
+    row['audit_write_pending'] = has_preview_work(item, uniformity=True)
+    plan = item.get('change_plan') or {}
+    row['change_plan'] = {'identity': plan.get('identity')}
+    for field in ('artist', 'title'):
+        row['change_plan'][field] = {key: (plan.get(field) or {}).get(key) for key in ('current','proposed','status')}
+    return row
+
+
+def result_snapshot(since):
+    revision = STATE.get('results_revision', 0)
+    results = STATE['results']
+    changes = [indices for number, indices in COVER_ROW_CHANGES if since < number <= revision]
+    # A gap means the list changed outside artwork operations, or the
+    # revision history expired. Indices are safe only without a gap.
+    if 0 <= since <= revision and len(changes) == revision - since:
+        indices = sorted({index for group in changes for index in group})
+        return {'revision': revision, 'updates': [
+            {'index': index, 'row': result_row(results[index])} for index in indices]}
+    return {'revision': revision, 'rows': [result_row(item) for item in results]}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
     def respond(self, data, status=200, content='application/json; charset=utf-8'):
@@ -550,89 +704,62 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(data)
         elif self.path=='/results':
             with LOCK:
-                rows=[]
-                from ui.editor import draft_matches_current,has_preview_work
-                for item in STATE['results']:
-                    row={key:item.get(key) for key in ('file','path','artist','title','remixer','_checkpoint_retry_required')}
-                    row['cover']={k:v for k,v in (item.get('_ui_cover') or {'status':'pending'}).items() if k in ('status','message','verification','manual_decision','confirmed_embedded','queued','write_error','changed','changed_at','change_kind','checked_at','diagnosis_outcome')}
-                    row['cover']['candidate_count']=len((item.get('_ui_cover') or {}).get('candidates') or [])
-                    row['audit']=item.get('_ui_audit') if STATE.get('audit_summary') is not None else None
-                    row['manual_draft']=bool(item.get('_ui_draft'))
-                    row['draft_matches_file']=draft_matches_current(item)
-                    row['draft_values']=(item.get('_ui_draft') or {}).get('values')
-                    row['draft_warning']=item.get('_ui_draft_warning')
-                    row['written']=bool(item.get('_ui_written'))
-                    row['completion_kind']=item.get('_ui_completion_kind','write')
-                    row['write_recheck_required']=bool(item.get('_ui_write_recheck_required'))
-                    row['write_pending']=has_preview_work(item)
-                    row['audit_write_pending']=has_preview_work(item,uniformity=True)
-                    plan=item.get('change_plan') or {}
-                    row['change_plan']={'identity':plan.get('identity')}
-                    for field in ('artist','title'):
-                        row['change_plan'][field]={k:(plan.get(field) or {}).get(k) for k in ('current','proposed','status')}
-                    rows.append(row)
+                rows=[result_row(item) for item in STATE['results']]
             self.respond(rows)
+        elif self.path.startswith('/results?since='):
+            value = self.path.removeprefix('/results?since=')
+            since = int(value) if re.fullmatch(r'[0-9]{1,18}', value) else -1
+            with LOCK:
+                snapshot = result_snapshot(since)
+            self.respond(snapshot)
         elif self.path.startswith('/cover_detail?'):
             from urllib.parse import parse_qs
             try:
                 index=int(parse_qs(urlparse(self.path).query)['index'][0])
                 with LOCK:
                     if not 0<=index<len(STATE['results']):raise ValueError('Трек недоступен.')
-                    item=STATE['results'][index]
-                    from core.storage import available_artwork
-                    from core.cover_query import default_query
-                    self.respond({**{k:item.get(k) for k in ('path','file','artist','title','album')},'suggested_query':default_query(item),'_ui_cover':available_artwork(item.get('_ui_cover'),ROOT)})
+                    item=dict(STATE['results'][index])
+                from core.storage import available_artwork
+                from core.cover_query import default_query
+                payload = {**{k:item.get(k) for k in ('path','file','artist','title','album')},
+                           'suggested_query':default_query(item),'_ui_cover':available_artwork(item.get('_ui_cover'),ROOT)}
+                self.respond(payload)
             except (ValueError,KeyError) as error:self.respond({'error':str(error)},400)
             except Exception as error:
                 self.respond({'error':'Не удалось открыть подбор обложки: '+str(error)+'. Перезапустите приложение после обновления.'},500)
         elif self.path.startswith('/cover_image?'):
             from urllib.parse import parse_qs
-            import base64,hashlib,re
+            import base64
             try:
                 q=parse_qs(urlparse(self.path).query);index=int(q['index'][0]);key=q['id'][0]
                 with LOCK:
                     if not 0<=index<len(STATE['results']):raise ValueError('Список изменился. Повторите выбор.')
-                    same_current=key=='current' and q.get('path',[None])[0]==STATE['results'][index].get('path')
-                    if int(q['revision'][0])!=STATE.get('results_revision',0) and not same_current:raise ValueError('Список изменился. Повторите выбор.')
-                    import copy
-                    item=copy.deepcopy(STATE['results'][index]);state=item.get('_ui_cover') or {}
+                    item=STATE['results'][index]
+                    track_path=item['path']
+                    if 'path' in q:
+                        if q['path'][0] != track_path:raise ValueError('Список изменился. Повторите выбор.')
+                    elif int(q['revision'][0]) != STATE.get('results_revision',0):
+                        raise ValueError('Список изменился. Повторите выбор.')
+                    state=item.get('_ui_cover') or {}
                     candidate=next((c for c in state.get('candidates',[]) if c.get('id')==key),None)
-                    current=key=='current' or key==state.get('current_id')
+                    current=key=='current' or (candidate is None and key==state.get('current_id'))
                     if not current and (not re.fullmatch(r'[a-f0-9]{64}',key) or candidate is None):raise ValueError('Обложка недоступна.')
-                from core.covers import pictures
-                from mutagen import File
-                from core.cache_utils import file_signature
                 if current:
-                    if state.get('signature')!=file_signature(item['path']):raise ValueError('Файл изменился. Обновите папку.')
-                    embedded=pictures(File(item['path']))
+                    from core.covers import pictures
+                    from mutagen import File
+                    from core.cache_utils import file_signature
+                    if state.get('signature')!=file_signature(track_path):raise ValueError('Файл изменился. Обновите папку.')
+                    embedded=pictures(File(track_path))
                     if not embedded:raise ValueError('В файле нет обложки.')
                     blob=embedded[0]
-                    if key!='current' and hashlib.sha256(blob).hexdigest()!=key:raise ValueError('Встроенная обложка изменилась. Обновите папку.')
+                    digest=hashlib.sha256(blob).hexdigest()
+                    if key!='current' and digest!=key:raise ValueError('Встроенная обложка изменилась. Обновите папку.')
+                    remember_preview((ROOT, digest), blob)
                 else:
-                    path=ROOT/'cache/covers'/(key+'.image')
-                    try:
-                        blob = path.read_bytes()
-                    except (FileNotFoundError, PermissionError):
-                        # Network/image dependencies live in the audio environment,
-                        # not in an older frozen desktop launcher.
-                        request = {k: candidate.get(k) for k in ('id', 'image_url', 'upscale')}
-                        if (state.get('queued') or {}).get('choice_key') == candidate.get('choice_key'):
-                            request['queued_path'] = item['path']
-                        restored = subprocess.run(
-                            [PYTHON, '-X', 'utf8', '-m', 'core.cover_image_restore'],
-                            input=json.dumps(request).encode('utf-8'), cwd=ROOT, capture_output=True,
-                            timeout=120, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
-                        )
-                        if restored.returncode:
-                            message = restored.stderr.decode('utf-8', errors='replace').strip()
-                            raise ValueError(message or 'Не удалось загрузить оригинал обложки.')
-                        blob = restored.stdout
-                    if hashlib.sha256(blob).hexdigest()!=key:raise ValueError('Кеш изображения повреждён.')
+                    blob = candidate_preview(track_path, state, candidate)
                 mime='image/png' if blob.startswith(b'\x89PNG') else 'image/jpeg'
                 info=state if current else candidate
                 self.respond({'image':'data:'+mime+';base64,'+base64.b64encode(blob).decode(),'width':info['width'],'height':info['height']})
-            except subprocess.TimeoutExpired:
-                self.respond({'error': 'Истекло время загрузки оригинала обложки. Повторите выбор.'}, 400)
             except (ValueError,KeyError,OSError) as error:self.respond({'error':str(error)},400)
         elif self.path.startswith('/detail?'):
             from urllib.parse import parse_qs
@@ -666,7 +793,7 @@ class Handler(BaseHTTPRequestHandler):
             self.respond({'error':'Нет доступа'},403);return
         try:
             n=int(self.headers.get('Content-Length',0))
-            if n>(23000000 if self.path=='/cover_import' else 1000000):raise ValueError('Слишком большой запрос')
+            if not 0<=n<=(23000000 if self.path in ('/cover_import','/cover_queue') else 1000000):raise ValueError('Слишком большой запрос')
             data=json.loads(self.rfile.read(n) or b'{}')
             if self.path=='/storage_cleanup':
                 with LOCK:
@@ -815,6 +942,8 @@ class Handler(BaseHTTPRequestHandler):
                         choice = data.get('choice_key')
                         if choice != 'current' and (len(ids) != 1 or not isinstance(choice, str) or not re.fullmatch('[a-f0-9]{64}', choice)):
                             raise ValueError('Выберите конкретную обложку для очереди.')
+                        if choice != 'current' and (not isinstance(data.get('original_image'), str) or not data['original_image']):
+                            raise ValueError('Выберите обложку и дождитесь загрузки оригинала.')
                         if any(type(data.get(k, False)) is not bool for k in ('review_confirmed', 'upscale_small')):
                             raise ValueError('Некорректные параметры обложки.')
                     if (action in ('cover_write','cover_import','cover_source','cover_upscale') or 'query' in data) and len(ids)!=1:raise ValueError('Выберите один трек.')

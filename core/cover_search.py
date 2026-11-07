@@ -2,12 +2,11 @@
 import re
 from concurrent.futures import ThreadPoolExecutor
 from core.duration_policy import duration_difference
-from core.release_discovery import same_track
-from core.cover_query import default_query
+from core.cover_query import default_query, same_cover_track
 
 
 def match_evidence(data, artist, title, duration):
-    identity = same_track(data.get('artist',''), data.get('title',''), artist, title)
+    identity = same_cover_track(data.get('artist',''), data.get('title',''), artist, title)
     difference = duration_difference(data.get('duration'), duration)
     reasons = []
     if not identity: reasons.append('Исполнитель или версия отличаются от сохранённых тегов.')

@@ -115,10 +115,17 @@ body{height:100vh;height:100dvh;overflow:hidden}.app-header{height:48px;min-heig
 <dialog id="storageDialog" aria-labelledby="storageTitle"><h2 id="storageTitle">Кэш и место на диске</h2><p id="storageStatus" role="status">Подсчитываем…</p><div id="storageNumbers"></div><p id="storagePolicy" class="muted"></p><p>Очистка удаляет только устаревшие варианты изображений и этапы, срок продолжения которых истёк, затем уплотняет базы. Музыка, резервные копии, ручные решения и аудиоотпечатки сохраняются.</p><div class="actions"><button id="storageCleanBtn" class="primary" onclick="cleanStorage()">Очистить устаревшее и уплотнить</button><button onclick="openStorage()">Обновить размер</button><button onclick="$('storageDialog').close()">Закрыть</button></div></dialog><dialog id="coverZoom"><h2 id="coverZoomTitle">Текущая обложка</h2><img id="coverZoomImage" alt="Текущая обложка крупно" style="max-width:80vw;max-height:75vh;object-fit:contain"><button onclick="$('coverZoom').close()">Закрыть</button></dialog><dialog id="renameEditor"><h2>Переименовать файл</h2><p class="notice">Имя можно ввести вручную или составить из записанных тегов. Если значения черновика отличаются от тегов файла, сначала запишите их через предпросмотр изменений. Переименование сохранит теги и дату изменения файла. В имени файла Windows запрещает обычные : и ?. Кнопка «Из записанных тегов» заменяет их на похожие ： и ？ только в имени файла. После ： пробел убирается. В аудиотегах остаются обычные : и ?.</p><label for="renameName">Новое имя с расширением</label><input id="renameName" style="width:100%" maxlength="255"><p id="renameError" role="alert"></p><div class="actions"><button onclick="useTagFilename()">Из записанных тегов</button><button id="renamePreviewBtn" class="primary" onclick="previewFilename()">Предпросмотр</button><button onclick="this.closest('dialog').close()">Отмена</button></div></dialog>
 <dialog id="outcome"><h2 id="outcomeTitle">Результат записи</h2><p id="outcomeHint">Подробности сохранены в отчёте. Успешно записанные треки доступны в «Исправленные». Раздел сохраняется. Успешные записи снимаются с выбора; треки с ошибками остаются выбранными.</p><pre id="outcomeText"></pre><button onclick="this.closest('dialog').close()">Закрыть</button></dialog><div id="toast" role="alert"></div>
 <dialog id="deleteDialog" aria-labelledby="deleteTitle"><h2 id="deleteTitle">Удаление файлов</h2><p id="deleteDescription"></p><p id="deleteCount" role="status"></p><pre id="deleteFiles"></pre><p id="deletePlanWarnings" class="notice" hidden></p><label id="deleteModeLabel" class="inline-check"><input id="deleteForever" type="checkbox" onchange="updateDeleteMode()"> Удалить безвозвратно и освободить место</label><p id="deletePermanentWarning" class="notice" hidden>Файлы будут удалены с диска без переноса в корзину. Восстановить их через TagCleaner нельзя. Резервные копии тегов не удаляются.</p><div class="actions"><button id="cancelDelete" autofocus onclick="cancelDeletion()">Отмена</button><button id="confirmDeleteBtn" class="danger" disabled onclick="confirmDelete()">Переместить в корзину</button></div></dialog><script>
-const token='__TOKEN__';const UI_API_VERSION=48;const UPDATE_MESSAGE='Файлы интерфейса используют разные версии. Закройте TagCleaner, распакуйте весь комплект последнего патча в папку приложения и запустите программу снова.';let items=[],selected=new Set(),page=0,current=-1,lastPhase='',state={},loading=false,resultsRevision=-1,editorData=null,editorIndex=-1,pendingEditor=null,outcomeRevision=0,queueScope='work',renameData=null,renameIndex=-1;const $=id=>document.getElementById(id);const labels={UNSCANNED:'Не сканирован',SAFE:'Уверенное',REVIEW:'Проверить',REJECT:'Не принято'};const fieldNames={artist:'Исполнитель',title:'Название',remixer:'Ремиксер / автор версии',album:'Альбом',albumartist:'Артист альбома',date:'Дата',tracknumber:'Номер трека',discnumber:'Номер диска'};
+const token='__TOKEN__';const UI_API_VERSION=51;const UPDATE_MESSAGE='Файлы интерфейса используют разные версии. Закройте TagCleaner, распакуйте весь комплект последнего патча в папку приложения и запустите программу снова.';let items=[],selected=new Set(),page=0,current=-1,lastPhase='',state={},loading=false,resultsRevision=-1,editorData=null,editorIndex=-1,pendingEditor=null,outcomeRevision=0,queueScope='work',renameData=null,renameIndex=-1;const $=id=>document.getElementById(id);const labels={UNSCANNED:'Не сканирован',SAFE:'Уверенное',REVIEW:'Проверить',REJECT:'Не принято'};const fieldNames={artist:'Исполнитель',title:'Название',remixer:'Ремиксер / автор версии',album:'Альбом',albumartist:'Артист альбома',date:'Дата',tracknumber:'Номер трека',discnumber:'Номер диска'};
 let pendingCoverUpscale=null,lastCoverUpscaleRevision=0,pendingCoverImport=null,lastCoverImportRevision=0,coverClipboardBusy=false;
 let coverQueue=[],pendingCoverWrite=null,lastCoverWriteRevision=0,pendingCoverMark=null,lastCoverMarkRevision=0;
 let coverIndex=-1,coverPath='',coverData=null,coverChoice='',coverLoadedRevision=-1,coverRequest=0,currentCoverImage=null,coverDetailLoading=null,coverCommand=null;
+let coverChoiceError='',selectedCoverImage=null;
+let coverPollTimer=null,coverPanelUpdating=false;
+
+function pollCoverQueueSoon(){
+ if(!coverCommand?.quick||!coverCommand.accepted||coverPollTimer!==null)return;
+ coverPollTimer=setTimeout(()=>{coverPollTimer=null;void poll()},150);
+}
 let selectionAnchor='',selectionFocus='';
 function coverVerification(c){if(c.manual_decision==='review')return 'Вы отметили для ручного поиска.';if(c.manual_decision==='confirmed')return 'Подтверждено вами вручную.';return c.verification?.message||'Наличие изображения ещё не подтверждает, что это обложка нужного издания.'}
 function coverDetail(d,i){let c=d._ui_cover||{};return `<section class="cover-panel"><h3>Обложка ${c.status==='ready'?'есть':'не добавлена'}</h3>${c.preview?`<img class="cover-preview" src="${esc(c.preview)}" alt="Текущая картинка">`:''}<p class="muted">${esc(coverVerification(c))}</p><button data-cover-action onclick="openCoverPicker(${i})">Выбрать / проверить обложку…</button></section>`}
@@ -133,6 +140,7 @@ async function openCoverPicker(i,keepQueue=false){
  if(!items[i]||state.phase==='writing'||pendingCoverWrite)return;
  if(!keepQueue)coverQueue=visibleRows.map(x=>x.d.path);
  let request=++coverRequest,revision=resultsRevision;coverDetailLoading=request;coverIndex=i;coverPath=items[i].path;current=i;coverData=null;coverChoice='';currentCoverImage=null;
+ coverChoiceError='';selectedCoverImage=null;
  $('coverActionStatus').textContent='';$('coverSquareCrop').checked=false;$('coverCropPosition').value='50';$('coverSourceUrl').value='';for(let id of ['coverCurrent','coverCandidates','coverChosenFacts'])$(id)._coverMarkup=null;
  $('coverLarge').removeAttribute('src');$('coverReviewConfirmed').checked=false;$('coverPanelBody').scrollTop=0;coverLoadedRevision=-1;
  $('coverPicker').hidden=false;$('detail').hidden=true;$('appLayout').classList.add('cover-inspector');
@@ -145,9 +153,9 @@ async function openCoverPicker(i,keepQueue=false){
  if($('coverAutoSearch').checked&&!d._ui_cover?.checked_at&&!d._ui_cover?.candidates?.length&&q.artist&&q.title&&state.phase==='ready')await runCoverSearch();
  }catch(e){if(request===coverRequest){$('coverSearchMessage').textContent=e.message;toast(e.message)}}finally{if(coverDetailLoading===request)coverDetailLoading=null}
 }
-function closeCoverPicker(){coverRequest++;$('coverPicker').hidden=true;$('detail').hidden=false;$('appLayout').classList.remove('cover-inspector');coverData=null;coverIndex=-1;coverChoice='';coverPath='';currentCoverImage=null;toggleInspector(false)}
+function closeCoverPicker(){coverRequest++;$('coverPicker').hidden=true;$('detail').hidden=false;$('appLayout').classList.remove('cover-inspector');coverData=null;coverIndex=-1;coverChoice='';coverPath='';currentCoverImage=null;selectedCoverImage=null;$('coverLarge').removeAttribute('src');toggleInspector(false)}
 function coverPayload(){let i=items.findIndex(d=>d.path===coverPath);if(i<0)throw Error('Трек больше не доступен. Откройте подбор заново.');coverIndex=i;return selectionPayload([i])}
-async function syncCoverPicker(){if(!coverPanelOpen()||coverDetailLoading!==null||coverLoadedRevision===resultsRevision)return;let request=coverRequest,revision=resultsRevision,i=items.findIndex(d=>d.path===coverPath);if(i<0){closeCoverPicker();return}coverDetailLoading=request;try{let d=await api('cover_detail?index='+i);if(request!==coverRequest||d.path!==coverPath)return;coverData=d;coverIndex=i;coverLoadedRevision=revision;if(!(d._ui_cover?.candidates||[]).some(c=>coverCandidateKey(c)===coverChoice))coverChoice='';renderCoverPicker()}finally{if(coverDetailLoading===request)coverDetailLoading=null}}
+async function syncCoverPicker(){if(!coverPanelOpen()||coverDetailLoading!==null||coverLoadedRevision===resultsRevision)return;let request=coverRequest,revision=resultsRevision,i=items.findIndex(d=>d.path===coverPath);if(i<0){closeCoverPicker();return}coverDetailLoading=request;try{let d=await api('cover_detail?index='+i);if(request!==coverRequest||d.path!==coverPath)return;coverData=d;coverIndex=i;coverLoadedRevision=revision;if(coverChoice&&!chosenCoverCandidate()){coverChoice='';coverChoiceError='';selectedCoverImage=null;$('coverLarge').removeAttribute('src')}renderCoverPicker()}finally{if(coverDetailLoading===request)coverDetailLoading=null}}
 function coverMarkup(id,markup){let node=$(id);if(node._coverMarkup!==markup){node.innerHTML=markup;node._coverMarkup=markup}}
 function renderCoverPicker(){
  updateCoverNavigation();if(!coverData)return;
@@ -156,24 +164,27 @@ function renderCoverPicker(){
  let currentKey=c.current_id||c.preview,current=currentCoverImage?.path===coverPath&&currentCoverImage?.id===currentKey?currentCoverImage:null,currentImage=current?.image;
  setCoverTrackName(coverData.file);
  $('coverActionError').hidden=!c.write_error;$('coverActionError').textContent=c.write_error?c.write_error+(c.write_restored?' Исходный файл восстановлен. Можно повторить запись или выбрать другой трек.':''):'';
- coverMarkup('coverCurrent',c.preview?`${currentImage?`<button type="button" onclick="previewCurrentCover()" aria-label="Увеличить текущую обложку"><img class="cover-current-image" src="${esc(currentImage)}" alt="Текущая обложка — оригинал из файла"></button>`:current?.error?`<div class="cover-original-loading"><p>${esc(current.error)}</p><button onclick="retryCurrentCoverImage()">Повторить загрузку оригинала</button></div>`:'<div class="cover-original-loading" role="status">Загружаем оригинал из файла…</div>'}<div class="cover-current-note">${c.confirmed_embedded?'Вшита и подтверждена':c.changed?'Изменена вами':c.manual_decision==='confirmed'?'Подтверждена вами':c.status==='ready'?'Исходная обложка':''}${currentImage?` · ${current.width||c.width} × ${current.height||c.height} пикселей · оригинал из файла`:''}</div>`:'<div class="cover-empty-current muted">Встроенной обложки нет</div>');
+ coverMarkup('coverCurrent',c.preview?`${currentImage?`<button type="button" onclick="previewCurrentCover()" aria-label="Увеличить текущую обложку"><img id="coverCurrentOriginal" class="cover-current-image" alt="Текущая обложка — оригинал из файла"></button>`:current?.error?`<div class="cover-original-loading"><p>${esc(current.error)}</p><button onclick="retryCurrentCoverImage()">Повторить загрузку оригинала</button></div>`:'<div class="cover-original-loading" role="status">Загружаем оригинал из файла…</div>'}<div class="cover-current-note">${c.confirmed_embedded?'Вшита и подтверждена':c.changed?'Изменена вами':c.manual_decision==='confirmed'?'Подтверждена вами':c.status==='ready'?'Исходная обложка':''}${currentImage?` · ${current.width||c.width} × ${current.height||c.height} пикселей · оригинал из файла`:''}</div>`:'<div class="cover-empty-current muted">Встроенной обложки нет</div>');
+ const original=$('coverCurrentOriginal');
+ if(currentImage&&original&&original.getAttribute('src')!==currentImage)original.src=currentImage;
  $('coverVerificationText').textContent=coverVerification(c);
- $('coverSearchMessage').textContent=c.candidates?.length?'Найдено вариантов: '+c.candidates.length+'. Выберите обложку.':c.message||'Найдите обложки или добавьте свой файл.';
+ $('coverSearchMessage').textContent=c.candidates?.length&&c.catalog_candidate_count!==0?'Вариантов: '+c.candidates.length+'. Выберите обложку.':c.message||'Найдите обложки или добавьте свой файл.';
  $('coverSearchErrors').textContent=(c.diagnosis_outcome==='partial'?'Часть источников недоступна. Найденные обложки можно выбрать и сохранить.\n':'')+(c.errors||[]).join('\n');
  $('coverFindBtn').textContent=c.checked_at?'Обновить варианты':'Найти обложки';
  $('coverCandidatesTitle').textContent='Варианты обложек'+(c.candidates?.length?' · '+c.candidates.length:'');
  coverMarkup('coverCandidates',(c.candidates||[]).map(x=>`<button type="button" class="cover-choice ${coverCandidateKey(x)===coverChoice?'chosen':''}" data-cover-action aria-pressed="${coverCandidateKey(x)===coverChoice}" onclick="chooseCover('${coverCandidateKey(x)}')"><img src="${esc(x.preview)}" alt="Обложка ${esc(x.release||'издания')}"><strong>${esc(x.release||'Издание')}</strong><span>${esc(x.artist||'')} · ${esc(x.title||'')}</span><span>${esc(x.source)}${x.date?' · '+esc(x.date):''} · ${x.width} × ${x.height}</span>${x.upscale?`<span>${x.upscale.crop?'Обрезано 1:1 · из':'Увеличено с'} ${x.upscale.original_width} × ${x.upscale.original_height} · ${esc(x.upscale.method)}</span>`:''}${x.needs_review?'<span class="cover-review-note">Проверьте расхождения</span>':''}</button>`).join('')||'<p class="muted">Вариантов пока нет. Нажмите «Найти обложки» или добавьте свой файл.</p>');
  coverMarkup('coverChosenFacts',choice?`<strong>${esc(choice.release||'Выбранное изображение')}</strong><p>${esc(choice.match_note||'Загружено вами.')}</p>${/^https:\/\//.test(choice.source_url||'')?`<a href="${esc(choice.source_url)}" target="_blank" rel="noopener noreferrer">Источник: ${esc(choice.source||'открыть')}</a>`:''}`:'');
  updateCoverUpscaleControls();
- $('coverChoiceEmpty').hidden=!!choice;$('coverSelectedZoom').disabled=!choice;
+ $('coverChoiceEmpty').hidden=!!choice;$('coverSelectedZoom').disabled=!selectedCoverImage?.original;
  $('coverReviewLabel').hidden=!choice?.needs_review;
- $('coverWriteBtn').disabled=(!choice&&c.status!=='ready')||state.phase!=='ready'||(choice?.needs_review&&!$('coverReviewConfirmed').checked);
- $('coverWriteBtn').textContent=choice?(c.queued?'Заменить выбор в очереди':'В очередь'):'Встроенную в очередь';
+ const refresh=needsCoverRefresh();
+ $('coverWriteBtn').disabled=state.phase!=='ready'||!!selectedCoverImage?.queueRequested||(!refresh&&((!choice&&c.status!=='ready')||(choice?.needs_review&&!$('coverReviewConfirmed').checked)));
+ $('coverWriteBtn').textContent=selectedCoverImage?.queueRequested?'Загружаем оригинал…':coverChoiceError?'Повторить добавление':refresh?'Обновить варианты':choice?(c.queued?'Заменить выбор в очереди':'В очередь'):'Встроенную в очередь';
  $('coverConfirmCurrent').textContent=choice?'Выбранную в очередь':'Встроенную в очередь';
  $('coverUnqueueBtn').hidden=!c.queued;
- $('coverQueuedNote').hidden=!c.queued;
+ $('coverQueuedNote').hidden=!c.queued&&!coverChoiceError;
  const queuedChoice=c.queued?.choice_key&&(c.candidates||[]).find(x=>coverCandidateKey(x)===c.queued.choice_key);
- $('coverQueuedNote').textContent=c.queued?.stale?'Файл изменился. Проверьте и добавьте обложку в очередь заново.':c.queued?.current?'В очереди · встроенная обложка':queuedChoice?.release?'В очереди · '+queuedChoice.release:'Выбранная обложка в очереди';
+ $('coverQueuedNote').textContent=coverChoiceError|| (c.queued?.stale?'Файл изменился. Проверьте и добавьте обложку в очередь заново.':c.queued?.needs_refresh?'Оригинал из старой очереди недоступен. Выберите один из загруженных вариантов или обновите поиск.':c.queued?.current?'В очереди · встроенная обложка':queuedChoice?.release?'В очереди · '+queuedChoice.release:'Выбранная обложка в очереди');
  loadCurrentCoverImage();
 }
 async function previewCurrentCover(){let current=currentCoverImage;if(!current?.image||current.path!==coverPath)return;$('coverZoomTitle').textContent='Текущая обложка · оригинал из файла';$('coverZoomImage').src=current.image;$('coverZoom').showModal()}
@@ -186,24 +197,43 @@ async function loadCurrentCoverImage(){
  catch(e){if(currentCoverImage===pending&&coverPath===path&&coverRequest===request){pending.error='Не удалось загрузить оригинал: '+e.message;renderCoverPicker()}}
 }
 async function chooseCover(id){
- if(!coverData)return;let path=coverPath,request=coverRequest;
- coverChoice=id;$('coverReviewConfirmed').checked=false;$('coverLarge').removeAttribute('src');renderCoverPicker();
- let choice=coverData._ui_cover?.candidates?.find(c=>coverCandidateKey(c)===id);if(choice?.preview)$('coverLarge').src=choice.preview;
- try{let payload=coverPayload(),d=await api('cover_image?index='+coverIndex+'&revision='+payload.revision+'&id='+encodeURIComponent(choice?.id||id));if(coverPath===path&&request===coverRequest&&coverChoice===id&&coverPanelOpen()){$('coverLarge').src=d.image;updateCoverCropPreview()}}catch(e){if(coverPath===path&&request===coverRequest)toast(e.message)}
+ const choice=coverData?._ui_cover?.candidates?.find(c=>coverCandidateKey(c)===id);
+ if(!choice||(selectedCoverImage?.id===id&&!coverChoiceError))return;
+ const path=coverPath,pending={id,original:null,queueRequested:false};
+ selectedCoverImage=pending;
+ coverChoice=id;coverChoiceError='';$('coverReviewConfirmed').checked=false;$('coverLarge').removeAttribute('src');renderCoverPicker();
+ if(choice.preview)$('coverLarge').src=choice.preview;
+ pending.ready=(async()=>{
+  try{
+   const payload=coverPayload();
+   const {image}=await api('cover_image?index='+coverIndex+'&revision='+payload.revision+'&id='+encodeURIComponent(choice.id)+'&path='+encodeURIComponent(path));
+   if(selectedCoverImage!==pending)return;
+   const comma=image?.indexOf(',')??-1;
+   if(comma<0||comma===image.length-1)throw Error('Не удалось загрузить оригинал обложки.');
+   pending.original=image;
+   $('coverLarge').src=image;
+   $('coverSelectedZoom').disabled=false;
+   updateCoverCropPreview();
+  }catch(e){
+   if(selectedCoverImage===pending){coverChoiceError=e.message;renderCoverPicker();controls()}
+  }
+ })();
+ await pending.ready;
 }
 function previewSelectedCover(){if(!$('coverLarge').getAttribute('src'))return;$('coverZoomTitle').textContent='Выбранная обложка';$('coverZoomImage').src=$('coverLarge').src;$('coverZoom').showModal()}
 async function coverAction(action,payload,message){
  if(coverCommand||state.phase!=='ready')return false;
- let command={action,path:coverPath,revision:state.results_revision??resultsRevision,errorRevision:state.error_revision||0,doneRevision:state.cover_operation_revision||0,accepted:false,message};coverCommand=command;
+ let command={action,path:coverPath,errorRevision:state.error_revision||0,doneRevision:state.cover_operation_revision||0,accepted:false,message};coverCommand=command;
+ command.quick=['cover_queue','cover_unqueue'].includes(action)&&payload.indices?.length===1;
  $('coverActionStatus').textContent=message;controls();
  try{await api(action,payload);command.accepted=true;await poll();return true}
  catch(e){if(coverCommand===command)coverCommand=null;$('coverActionStatus').textContent=e.message;toast(e.message);return false}
- finally{controls()}
+ finally{pollCoverQueueSoon();controls()}
 }
 function settleCoverCommand(){
  let command=coverCommand;if(!command?.accepted)return;
  if(state.phase==='error'||state.phase==='stopped'||(state.error_revision||0)>command.errorRevision){coverCommand=null;$('coverActionStatus').textContent=state.action_error||state.message||'Действие не завершено. Можно повторить.';return}
- if(state.phase!=='ready'||((state.cover_operation_revision||0)<=command.doneRevision&&(state.results_revision||0)<=command.revision))return;
+ if(state.phase!=='ready'||(state.cover_operation_revision||0)<=command.doneRevision)return;
  coverCommand=null;
  if(command.action==='cover_commit'){$('coverActionStatus').textContent=state.message;return}
  if(coverPath!==command.path)return;
@@ -215,7 +245,7 @@ function settleCoverCommand(){
  if(['cover_search','cover_diagnose'].includes(command.action)&&state.cover_summary?.cancelled){$('coverActionStatus').textContent='Проверка остановлена. Можно запустить её снова.';return}
  $('coverActionStatus').textContent=command.action==='cover_mark'?'Отметка сохранена.':command.action==='cover_write'?'Обложка вшита и проверена. Трек подтверждён.':command.action==='cover_upscale'?'Обложка обработана. Сравните с исходником перед вшиванием.':['cover_import','cover_source'].includes(command.action)?'Изображение добавлено. Выберите его и сохраните.':c.diagnosis_outcome==='partial'?'Варианты найдены. Часть источников недоступна; можно выбрать обложку или повторить поиск.':c.errors?.length?'Поиск не завершён. Можно повторить или добавить обложку вручную.':c.candidates?.length?'Проверка завершена. Найдено вариантов: '+c.candidates.length+'.':'Проверка завершена. В доступных источниках вариантов нет.';
 }
-async function runCoverSearch(){if(coverCommand||state.phase!=='ready'||!coverData)return;try{let query={};for(let key of ['artist','title','album'])query[key]=$('coverQuery_'+key).value.trim();await coverAction('cover_search',{...coverPayload(),query},'Ищем варианты обложки…')}catch(e){toast(e.message)}}
+async function runCoverSearch(){if(coverCommand||state.phase!=='ready'||!coverData)return;try{let query={};for(let key of ['artist','title','album'])query[key]=$('coverQuery_'+key).value.trim();if(coverChoiceError){coverChoice='';coverChoiceError='';selectedCoverImage=null;$('coverLarge').removeAttribute('src');renderCoverPicker()}await coverAction('cover_search',{...coverPayload(),query},'Ищем варианты обложки…')}catch(e){toast(e.message)}}
 async function searchCovers(i){if(i!==undefined)return openCoverPicker(i);if(!selected.size)return;await coverAction('cover_search',selectionPayload(),'Загружаем варианты: '+selected.size+'…')}
 async function markCover(decision){
  if(decision==='confirmed')return writeChosenCover(true);
@@ -228,14 +258,38 @@ async function bulkMarkCovers(decision){let ids=bulkCoverIndices(decision);if(!i
 async function finishCoverMarks(){let revision=state.cover_mark_revision||0;if(revision<=lastCoverMarkRevision)return;lastCoverMarkRevision=revision;let paths=new Set(state.cover_marked_paths||[]),pending=pendingCoverMark;pendingCoverMark=null;for(let i of [...selected])if(paths.has(items[i]?.path))selected.delete(i);for(let path of paths)pendingSelectionPaths.delete(path);renderList();if(pending&&paths.has(pending.path)&&coverPanelOpen()&&coverPath===pending.path&&$('coverAutoNext').checked&&pending.decision!=='clear'){let at=coverQueue.indexOf(coverPath);if(at>=0&&at<coverQueue.length-1)await stepCover(1);else closeCoverPicker()}}
 function coverCandidateKey(c){return c.choice_key||c.id}
 function chosenCoverCandidate(){return coverData?._ui_cover?.candidates?.find(c=>coverCandidateKey(c)===coverChoice)}
+function needsCoverRefresh(){return Boolean(!chosenCoverCandidate()&&coverData?._ui_cover?.queued?.needs_refresh)}
 async function writeChosenCover(allowCurrent=false){
+ if(needsCoverRefresh())return runCoverSearch();
  const candidate=chosenCoverCandidate();
  const current=allowCurrent&&!candidate&&coverData?._ui_cover?.status==='ready';
  if((!candidate&&!current)||state.phase!=='ready'||coverCommand||(candidate?.needs_review&&!$('coverReviewConfirmed').checked))return;
- const payload={...coverPayload(),choice_key:current?'current':coverCandidateKey(candidate)};
- if(candidate)Object.assign(payload,{review_confirmed:$('coverReviewConfirmed').checked,
-  upscale_small:$('coverAutoUpscale').checked,crop_square:$('coverSquareCrop').checked,
-  crop_position:Number($('coverCropPosition').value||50)});
+ let options={choice_key:'current'};
+ if(candidate){
+  const key=coverCandidateKey(candidate);
+  if(coverChoiceError){
+   const reviewed=$('coverReviewConfirmed').checked;
+   void chooseCover(key);
+   $('coverReviewConfirmed').checked=reviewed;
+  }
+  const preview=selectedCoverImage;
+  if(preview?.id!==key||preview.queueRequested)return;
+  if(!preview.original){
+   preview.queueRequested=true;
+   renderCoverPicker();controls();
+   await preview.ready;
+   preview.queueRequested=false;
+   if(selectedCoverImage!==preview||coverChoice!==key)return;
+   renderCoverPicker();controls();
+  }
+  if(!preview.original||state.phase!=='ready'||coverCommand)return;
+  if(chosenCoverCandidate()?.needs_review&&!$('coverReviewConfirmed').checked)return;
+  options={choice_key:key,review_confirmed:$('coverReviewConfirmed').checked,
+   upscale_small:$('coverAutoUpscale').checked,crop_square:$('coverSquareCrop').checked,
+   crop_position:Number($('coverCropPosition').value||50),
+   original_image:preview.original.slice(preview.original.indexOf(',')+1)};
+ }
+ const payload={...coverPayload(),...options};
  pendingCoverMark={path:coverPath,decision:'queued'};
  if(!await coverAction('cover_queue',payload,'Добавляем выбор в очередь…'))pendingCoverMark=null;
 }
@@ -243,7 +297,10 @@ async function unqueueCover(){
  if(coverData?._ui_cover?.queued)await coverAction('cover_unqueue',coverPayload(),'Убираем выбор из очереди…');
 }
 function selectedQueuedCovers(){
- return [...selected].filter(i=>items[i]?.cover?.queued);
+ return [...selected].filter(i=>{
+  const queued=items[i]?.cover?.queued;
+  return queued&&!queued.needs_refresh;
+ });
 }
 async function commitCoverQueue(){
  const ids=selectedQueuedCovers();
@@ -270,7 +327,7 @@ async function finishCoverImport(){
  let revision=state.cover_import_revision||0;if(revision<=lastCoverImportRevision)return;lastCoverImportRevision=revision;
  let pending=pendingCoverImport;pendingCoverImport=null;
  if(!pending||pending.path!==coverPath||pending.generation!==coverRequest||!coverPanelOpen())return;
- let key=state.cover_imported_choices?.[pending.path];if(key&&coverData?._ui_cover?.candidates?.some(c=>coverCandidateKey(c)===key)){await chooseCover(key);$('coverPanelBody').scrollTop=0}
+ let key=state.cover_imported_choices?.[pending.path];if(key&&coverData?._ui_cover?.candidates?.some(c=>coverCandidateKey(c)===key)){void chooseCover(key);$('coverPanelBody').scrollTop=0}
 }
 async function pasteCoverFromClipboard(){
  if(!coverPanelOpen()||!coverData||coverClipboardBusy)return;
@@ -319,15 +376,15 @@ async function finishCoverUpscale(){
  let revision=state.cover_upscale_revision||0;if(revision<=lastCoverUpscaleRevision)return;lastCoverUpscaleRevision=revision;
  let pending=pendingCoverUpscale;pendingCoverUpscale=null;
  if(!pending||pending.path!==coverPath||!coverPanelOpen())return;
- let key=state.cover_upscaled_choices?.[pending.path];if(key&&coverData?._ui_cover?.candidates?.some(c=>coverCandidateKey(c)===key))await chooseCover(key)
+ let key=state.cover_upscaled_choices?.[pending.path];if(key&&coverData?._ui_cover?.candidates?.some(c=>coverCandidateKey(c)===key))void chooseCover(key)
 }
 function chooseCoverOriginal(){let key=chosenCoverCandidate()?.upscale?.origin_choice_key;if(key&&coverData?._ui_cover?.candidates?.some(c=>coverCandidateKey(c)===key))chooseCover(key)}
 function coverDiagnosisLabel(c={}){if(!c.checked_at)return 'Диагностика не запускалась';let date=new Date(c.checked_at*1000).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'});return (c.candidate_count>0?'Варианты: '+c.candidate_count+' · ':'')+(c.diagnosis_outcome==='error'?'Ошибка проверки':c.diagnosis_outcome==='cancelled'?'Остановлена':c.diagnosis_outcome==='partial'?'Часть источников недоступна':c.diagnosis_outcome==='outdated'?'Нужен повторный поиск':c.verification?.status==='source_match'?'Есть совпадение':'Не сопоставлена')+' · '+date}
-function coverRowStatus(d){let c=d.cover||{};if(c.queued)return c.queued.stale?'Обновите выбор':c.write_error?'Ошибка вшивания':'Готова к вшиванию';if(c.manual_decision==='review')return 'Ручной поиск';if(c.manual_decision==='confirmed'&&(c.confirmed_embedded||!c.changed))return 'Подтверждена вами';if(c.diagnosis_outcome==='error')return 'Проверка не завершена';if(c.changed)return c.change_kind==='added'?'Добавлена вами':'Заменена вами';if(c.verification?.status==='source_match')return 'Совпала с источником';return {ready:'Исходная · не меняли',pending:'Без обложки',not_found:'Не найдена'}[c.status||'pending']}
+function coverRowStatus(d){let c=d.cover||{};if(c.queued){if(c.queued.stale)return 'Обновите выбор';if(c.queued.needs_refresh)return 'Обновите варианты';return c.write_error?'Ошибка вшивания':'Готова к вшиванию'}if(c.manual_decision==='review')return 'Ручной поиск';if(c.manual_decision==='confirmed'&&(c.confirmed_embedded||!c.changed))return 'Подтверждена вами';if(c.diagnosis_outcome==='error')return 'Проверка не завершена';if(c.changed)return c.change_kind==='added'?'Добавлена вами':'Заменена вами';if(c.verification?.status==='source_match')return 'Совпала с источником';return {ready:'Исходная · не меняли',pending:'Без обложки',not_found:'Не найдена'}[c.status||'pending']}
 function diagnosisIndices(){let target=$('coverDiagnosisTarget').value;if(target==='selected')return [...selected];if(target==='section')return filtered().map(x=>x.i);if(target==='all')return items.map((d,i)=>i);return items.flatMap((d,i)=>((target==='existing'?d.cover?.status==='ready':target==='changed'?isCoverChanged(d):!d.cover?.checked_at||['error','cancelled','partial','outdated'].includes(d.cover?.diagnosis_outcome))?[i]:[]))}
-function coverPreparationIndices(){let ids=diagnosisIndices();return $('coverOnlyMissing').checked?ids.filter(i=>!(items[i]?.cover?.candidate_count>0)):ids}
+function coverPreparationIndices(ids=diagnosisIndices()){return $('coverOnlyMissing').checked?ids.filter(i=>!(items[i]?.cover?.candidate_count>0)):ids}
 async function prepareCoverChoices(){let ids=coverPreparationIndices();if(ids.length)await coverAction('cover_search',selectionPayload(ids),'Загружаем варианты для '+ids.length+' треков…')}
-function updateCoverActions(){if(!$('coverDiagnoseBtn'))return;let count=diagnosisIndices().length,prepareCount=coverPreparationIndices().length,busy=state.phase!=='ready'||!!coverCommand;$('coverDiagnoseBtn').textContent='Перепроверить · '+count;setDisabled('coverDiagnoseBtn',busy||!count);$('coverPrepareBtn').textContent='Загрузить варианты · '+prepareCount;setDisabled('coverPrepareBtn',busy||!prepareCount);$('coverBulkStop').hidden=!state.cover_running;let r=state.cover_summary, commit=queueScope==='cover_queue'&&state.cover_commit_summary;$('coverDiagnosisSummary').textContent=state.cover_running?`${state.phase==='writing'?'Вшиваем обложки':'Загружаем варианты'}: ${state.done||0} из ${state.total||0}.`:commit?`Вшито: ${commit.written} из ${commit.total} · ошибок ${commit.errors}${commit.cancelled?' · остановлено':''}`:r?`Последний запуск: ${r.processed} из ${r.total}${r.prepared_tracks!=null?' · с вариантами: '+r.prepared_tracks+' ('+(r.candidate_count||0)+' картинок)':''} · ошибок ${r.errors}${r.partial?' · часть источников недоступна: '+r.partial:''}${r.cancelled?' · остановлен':''}`:'Найденные варианты можно добавить в очередь и вшить пакетом.'}
+function updateCoverActions(){if(!$('coverDiagnoseBtn'))return;let ids=diagnosisIndices(),count=ids.length,prepareCount=coverPreparationIndices(ids).length,busy=state.phase!=='ready'||!!coverCommand||!!pendingCoverImport||coverClipboardBusy||state.ui_api_version!==UI_API_VERSION;$('coverDiagnoseBtn').textContent='Перепроверить · '+count;setDisabled('coverDiagnoseBtn',busy||!count);$('coverPrepareBtn').textContent='Загрузить варианты · '+prepareCount;setDisabled('coverPrepareBtn',busy||!prepareCount);$('coverBulkStop').hidden=!state.cover_running;let r=state.cover_summary, commit=queueScope==='cover_queue'&&state.cover_commit_summary;$('coverDiagnosisSummary').textContent=state.cover_running?`${state.phase==='writing'?'Вшиваем обложки':'Загружаем варианты'}: ${state.done||0} из ${state.total||0}.`:commit?`Вшито: ${commit.written} из ${commit.total} · ошибок ${commit.errors}${commit.cancelled?' · остановлено':''}`:r?`Последний запуск: ${r.processed} из ${r.total}${r.prepared_tracks!=null?' · с вариантами: '+r.prepared_tracks+' ('+(r.candidate_count||0)+' картинок)':''} · ошибок ${r.errors}${r.partial?' · часть источников недоступна: '+r.partial:''}${r.cancelled?' · остановлен':''}`:'Найденные варианты можно добавить в очередь и вшить пакетом.'}
 async function diagnoseCovers(){let ids=diagnosisIndices();if(ids.length)await coverAction('cover_diagnose',selectionPayload(ids),'Проверяем обложки: '+ids.length+'…')}
 async function diagnoseCurrentCover(){if(!coverData)return;try{await coverAction('cover_diagnose',coverPayload(),'Повторно проверяем обложку…')}catch(e){toast(e.message)}}
 function updateCoverNavigation(){let at=coverQueue.indexOf(coverPath);$('coverPosition').textContent=at>=0?`${at+1} из ${coverQueue.length}`:'';setDisabled('coverPrevious',state.phase!=='ready'||at<=0);setDisabled('coverNext',state.phase!=='ready'||at<0||at>=coverQueue.length-1)}
@@ -343,7 +400,7 @@ async function openStorage(){if(!$('storageDialog').open)$('storageDialog').show
 async function cleanStorage(){$('storageStatus').textContent='Освобождаем место… Размер обновится автоматически.';try{if(await act('storage_cleanup',{})===false)$('storageStatus').textContent='Очистка не выполнена. Дождитесь завершения текущей операции.'}catch(e){toast(e.message)}}
 function syncStorage(){if(!state.storage_summary||storageRevision===(state.storage_revision||0))return;storageRevision=state.storage_revision||0;if($('storageDialog').open){storageView(state.storage_summary);let r=state.storage_result||{},bytes=(r.removed_bytes||0)+Object.values(r).filter(v=>v&&typeof v==='object').reduce((n,v)=>n+(v.reclaimed_bytes||0),0);$('storageStatus').textContent='Готово. Освобождено '+formatFileBytes(bytes)+(r.errors?.length?' · '+r.errors.join('; '):'')}}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-async function api(path,data){if(data!==undefined&&path!=='open'&&state.ui_api_version!==UI_API_VERSION)throw Error(UPDATE_MESSAGE);let r=await fetch('/'+path,{...(path==='state'?{signal:AbortSignal.timeout(10000)}:{}),method:data===undefined?'GET':'POST',headers:{'X-Token':token,'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});let j=await r.json();if(!r.ok)throw Error(j.error||'Ошибка');return j}
+async function api(path,data){if(data!==undefined&&path!=='open'&&state.ui_api_version!==UI_API_VERSION)throw Error(UPDATE_MESSAGE);let r=await fetch('/'+path,{...(data===undefined?{signal:AbortSignal.timeout(path.startsWith('cover_image?')?55000:10000)}:{}),method:data===undefined?'GET':'POST',headers:{'X-Token':token,'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});let j=await r.json();if(!r.ok)throw Error(j.error||'Ошибка');return j}
 function toast(t){$('toast').textContent=t;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',8000)}
 async function act(a,d={}){try{await api(a,d);await poll();return true}catch(e){toast(e.message);return false}}
 function hint(){$('modehint').textContent={resume:'Сохранённые решения + повтор незавершённых проверок. Подходит после перезапуска.',recheck_cached:'Заново применить алгоритм, используя накопленные ответы сервисов.',recheck:'Старые ответы Shazam не используются. Большая коллекция может проверяться много часов.'}[$('mode').value]}
@@ -354,7 +411,7 @@ function coverBucket(d){let c=d.cover||{};if(c.queued)return 'queue';if(c.manual
 function inScope(d){if(queueScope==='cover_queue')return coverBucket(d)==='queue'||($('coverQueueShowDone').checked&&['changed','confirmed'].includes(coverBucket(d)));if(queueScope.startsWith('cover_'))return coverBucket(d)===queueScope.slice(6);return queueScope==='all'||queueScope==='work'&&!isWritten(d)||queueScope==='written'&&isWritten(d)||queueScope==='audit'&&!!d.audit?.issues?.length}
 function setScope(scope){if(!['work','written','all','audit','cover_ready','cover_pending','cover_not_found','cover_review','cover_changed','cover_confirmed','cover_queue'].includes(scope))return;pendingAuditView=false;if(queueScope===scope)return;queueScope=scope;resetScroll();current=-1;$('filter').value='all';clearDetail();renderList()}
 function clearDetail(){detailRequest++;toggleInspector(false);$('detail').innerHTML='<h2>Подробности трека</h2><p class="muted">Выберите трек в списке для просмотра и редактирования.</p>'}
-function filtered(){let q=$('search').value.toLocaleLowerCase(),f=$('filter').value;return items.map((d,i)=>({d,i})).filter(({d})=>inScope(d)&&(f==='all'||(f==='cover_review'?d.cover?.manual_decision==='review':f==='manual'?d.manual_draft:(f==='retry'?(d._checkpoint_retry_required&&!isWritten(d)):(d.change_plan||{}).identity===f)))&&[d.file,d.artist,d.title,d.remixer,d.draft_values?.remixer,d.path,(d.change_plan?.artist||{}).proposed,(d.change_plan?.title||{}).proposed].join(' ').toLocaleLowerCase().includes(q))}
+function filtered(){let q=$('search').value.toLocaleLowerCase(),f=$('filter').value;return items.map((d,i)=>({d,i})).filter(({d})=>inScope(d)&&(f==='all'||(f==='cover_review'?d.cover?.manual_decision==='review':f==='manual'?d.manual_draft:(f==='retry'?(d._checkpoint_retry_required&&!isWritten(d)):(d.change_plan||{}).identity===f)))&&(!q||[d.file,d.artist,d.title,d.remixer,d.draft_values?.remixer,d.path,(d.change_plan?.artist||{}).proposed,(d.change_plan?.title||{}).proposed].join(' ').toLocaleLowerCase().includes(q)))}
 function updateQueueCounts(){
  for(let [bucket,id] of [['ready','coverReadyCount'],['queue','coverQueueCount'],['review','coverReviewCount'],['pending','coverPendingCount'],['not_found','coverNotFoundCount']])$(id).textContent=items.filter(d=>coverBucket(d)===bucket).length;
  let written=items.filter(isWritten).length;$('workCount').textContent=items.length-written;$('writtenCount').textContent=written;$('allCount').textContent=items.length;$('scope_audit').hidden=!state.audit_summary&&queueScope!=='audit';$('auditCount').textContent=state.audit_summary?.deviations||0;
@@ -429,12 +486,12 @@ function controls(){if(pendingCoverImport&&((state.error_revision||0)>pendingCov
  setDisabled('coverCommitBtn',coverDisabled||!queuedCount);
  setDisabled('coverBulkConfirm',coverDisabled||!confirmCount);setDisabled('coverBulkReview',coverDisabled||!selected.size);
  $('storageCleanBtn').disabled=!['idle','ready','stopped','error'].includes(state.phase);$('coverPickerStop').hidden=!state.cover_running;$('coverStopBtn').hidden=!state.cover_running;
- setDisabled('coverSearchBtn',coverDisabled||!selected.size);$('coverSearchBtn').textContent='Обновить варианты · '+selected.size;setDisabled('coverDiagnoseBtn',coverDisabled||!diagnosisIndices().length);
+ setDisabled('coverSearchBtn',coverDisabled||!selected.size);$('coverSearchBtn').textContent='Обновить варианты · '+selected.size;
  for(let b of ($('coverPicker').querySelectorAll?.('[data-cover-action]')||[])){let disabled=coverDisabled||!coverData||(b.id==='coverConfirmCurrent'&&!chosenCoverCandidate()&&coverData?._ui_cover?.status!=='ready');if(b.disabled!==disabled)b.disabled=disabled}
  for(let b of ($('detail').querySelectorAll?.('[data-cover-action]')||[])){let disabled=state.phase!=='ready';if(b.disabled!==disabled)b.disabled=disabled}
  setDisabled('coverPasteBtn',coverDisabled||!coverData||coverClipboardBusy);
- setDisabled('coverConfirmCurrent',coverDisabled||(!chosenCoverCandidate()&&coverData?._ui_cover?.status!=='ready'));
- let choice=chosenCoverCandidate();setDisabled('coverWriteBtn',coverDisabled||(!choice&&coverData?._ui_cover?.status!=='ready')||!!pendingCoverWrite||(choice?.needs_review&&!$('coverReviewConfirmed').checked));
+ setDisabled('coverConfirmCurrent',coverDisabled||!!selectedCoverImage?.queueRequested||(!chosenCoverCandidate()&&coverData?._ui_cover?.status!=='ready'));
+ let choice=chosenCoverCandidate();setDisabled('coverWriteBtn',coverDisabled||!!pendingCoverWrite||!!selectedCoverImage?.queueRequested||(!needsCoverRefresh()&&((!choice&&coverData?._ui_cover?.status!=='ready')||(choice?.needs_review&&!$('coverReviewConfirmed').checked))));
  $('coverFindBtn').textContent=coverCommand&&['cover_search','cover_diagnose'].includes(coverCommand.action)?'Ищем обложки…':coverData?._ui_cover?.checked_at?'Обновить варианты':'Найти обложки';
  let compatible=state.ui_api_version===UI_API_VERSION;let busy=!compatible||['auditing','scanning','finishing','stopping','review','prompt','writing','maintenance'].includes(state.phase);for(let id of ['folderBtn','filesBtn','lastBtn','startBtn','mode','settingsBtn','refreshBtn','undoBtn','emptyTrashBtn','auditBtn'])$(id).disabled=busy;$('startBtn').hidden=queueScope.startsWith('cover_')||['auditing','scanning','finishing','stopping'].includes(state.phase);$('stopBtn').hidden=!['auditing','scanning','finishing','stopping'].includes(state.phase);$('stopBtn').disabled=state.phase==='stopping'||!!state.audit_cancelling;$('stopBtn').textContent=state.phase==='auditing'?'Отменить диагностику':'Остановить поиск';$('auditBtn').disabled=busy||(!state.count&&!state.roots?.length);$('auditRun').disabled=busy||(!state.count&&!state.roots?.length);$('auditRecheckAll').disabled=$('auditRun').disabled;for(let id of ['previewBtn','reviewBtn','retryBtn','renameBtn','completeBtn','deleteBtn','auditFixBtn'])$(id).disabled=!compatible||state.phase!=='ready'||!selected.size;$('startBtn').disabled=busy||!state.count;$('refreshBtn').disabled=busy||(!state.count&&!state.roots?.length);$('undoBtn').hidden=!state.undo_delete;$('emptyTrashBtn').disabled=!compatible||!['idle','ready','stopped','error'].includes(state.phase);for(let edit of $('tracks').querySelectorAll?.('.track-edit')||[]){let disabled=!compatible||state.phase!=='ready';if(edit.disabled!==disabled)edit.disabled=disabled}for(let id of ['editTrackBtn','renameTrackBtn','renamePreviewBtn']){let edit=$(id);if(edit)edit.disabled=!compatible||state.phase!=='ready'}for(let id of ['saveEdit','previewEdit','resetEdit','cancelEdit','confirmEdit','releaseSearchBtn','creditStyleBtn','localIdentityBtn','filenameIdentityBtn'])$(id).disabled=!!pendingEditor||editorCreditPending||!compatible||state.phase!=='ready';if($('editor').open&&editorData){let same=editorTagsUnchanged();$('saveEdit').disabled=$('saveEdit').disabled||(same&&!editorReleaseChanged());$('previewEdit').disabled=$('previewEdit').disabled||same;}$('releaseSearchBtn').disabled=$('releaseSearchBtn').disabled||!!pendingReleaseSearch;$('cancelEdit').disabled=!!pendingEditor||!compatible;for(let key of Object.keys(fieldNames)){let input=$('edit_'+key);if(input&&editorData)input.disabled=!!pendingEditor||editorCreditPending||!editorData.editor.writable[key]}if(pendingEditor)$('editorChangeStatus').textContent='Сохраняем ваш выбор…';setDisabled('editorRelease',!!pendingEditor||editorCreditPending||!compatible||state.phase!=='ready');setDisabled('releaseConfirmed',!!pendingEditor||editorCreditPending)}
 async function retrySelected(){await act('start',{mode:'recheck_cached',...selectionPayload()})}
@@ -503,7 +560,37 @@ function renderOutcome(){if(state.outcome?.operation_kind==='uniformity'){let su
 async function finishPendingEditor(){if(!pendingEditor||!['ready','preview','error'].includes(state.phase))return;if(state.action_error||state.phase==='error'){$('editorError').textContent=state.action_error||state.message;pendingEditor=null;return}if(resultsRevision===pendingEditor.revision)return;let index=pendingEditor.index;pendingEditor=null;$('editorError').textContent='';$('editor').close();if(items[index]?.manual_draft&&!items[index]?.draft_matches_file)selected.add(index);renderList();if(inScope(items[index]))await detail(index,false);else{current=-1;clearDetail()}}
 let shownPreviewRevision=-1;
 function syncPreview(){if(state.phase!=='preview'||($('preview').open&&shownPreviewRevision===(state.preview_revision||0)))return;renderPreviewInfo();$('ops').innerHTML=state.operations.map(o=>`<tr><td>${esc(o.file)}<small>${esc((o.field==='filename'?'Имя файла':fieldNames[o.field])||o.field)}</small></td><td>${esc(o.current)}</td><td>${esc(o.proposed)}</td></tr>`).join('');let planned=new Set(state.operations.map(o=>o.path)).size;let skipped=(state.skipped||[]).length;$('previewSkipped').hidden=!skipped;$('previewSkipped').open=false;$('previewSkippedSummary').textContent='Не включены в запись: '+skipped+' · причины';$('opCount').textContent=`${state.operations.length} изменений в ${planned} файлах · выбрано: ${state.preview_selected_count??(planned+skipped)} · без записи: ${skipped}`;$('writeBtn').disabled=!state.operations.length;if(!$('preview').open)$('preview').showModal();shownPreviewRevision=state.preview_revision||0;}
-async function poll(){if(loading)return;loading=true;try{state=await api('state');if(pendingCoverWrite&&(state.action_error||['error','stopped'].includes(state.phase)))pendingCoverWrite=null;syncStorage();if(state.ui_api_version!==UI_API_VERSION)state.warning=UPDATE_MESSAGE;$('selection').textContent=state.roots?.length?`${state.roots.join(', ')} · ${state.count} файлов`:state.count?`${state.count} аудиофайлов (выбраны отдельно)`:'Папка ещё не выбрана';$('selection').title=state.roots?.join('\n')||'';$('status').textContent=(state.total?`${state.done||0} / ${state.total} · `:'')+(state.message||'Выберите папку с музыкой')+(state.refresh_requested?' · Обновление папки запланировано после операции':'');$('status').title=$('status').textContent;$('progress').max=state.total||1;if(state.phase==='finishing')$('progress').removeAttribute('value');else $('progress').value=state.done||0;$('finalizing').hidden=state.phase!=='finishing';if(state.phase==='finishing'&&!items.length)renderList();$('appWarning').hidden=!state.warning;$('appWarning').textContent=state.warning||'';$('log').textContent=(state.ui_build?'Версия интерфейса: '+state.ui_build+'\n\n':'')+(state.log||[]).map(e=>e.kind==='progress'?`${e.stage}: ${e.file||JSON.stringify(e.details)}`:e.kind==='export'?`План сохранён: ${e.path}`:e.kind==='error'?e.message:'').filter(Boolean).join('\n');if(!state.result_count&&(items.length||pendingSelectionPaths.size)){replaceResults([]);current=-1;page=0;clearDetail();renderList()}if(state.result_count&&(items.length!==state.result_count||resultsRevision!==(state.results_revision||0))){replaceResults(await api('results'));resultsRevision=state.results_revision||0;renderList();if(current>=0&&!$('editor').open&&!coverPanelOpen())await detail(current,false)}await updateEditorReleases();await syncCoverPicker();await finishCoverImport();await finishCoverUpscale();await finishCoverWrite();await finishCoverMarks();applyAuditNavigation();if(settleWrittenSelection())renderList();await finishPendingEditor();syncPreview();if(state.phase!==lastPhase||(state.phase==='prompt'&&state.prompt?.prompt_id!==lastPromptId)){if(state.phase==='prompt'){let p=state.prompt;lastPromptId=p.prompt_id;$('reviewText').textContent=p.text;$('question').textContent=p.prompt;$('answer').value='';let opts=[...p.text.matchAll(/^\s*([0-9]+|q)\s*[—–-]\s*(.+)$/gm)].slice(-12);$('quick').replaceChildren();for(let o of opts){let b=document.createElement('button');b.textContent=o[2];b.onclick=()=>answer(o[1]);$('quick').append(b)}if(!$('review').open)$('review').showModal();$('answer').focus()}if(state.phase==='error')toast(state.message);if(state.action_error)toast(state.action_error);lastPhase=state.phase}if((state.error_revision||0)>lastErrorRevision){lastErrorRevision=state.error_revision;toast(state.action_error||state.message)}if((state.outcome_revision||0)>outcomeRevision){outcomeRevision=state.outcome_revision;renderOutcome();if(!$('outcome').open)$('outcome').showModal()}if(state.close_notice&&window.lastCloseNotice!==state.close_notice){toast(state.close_notice);window.lastCloseNotice=state.close_notice}}catch(e){$('status').textContent='Не удалось обновить интерфейс: '+e.message}finally{loading=false;settleCoverCommand();controls()}}
+async function refreshResultRows(){
+ const since=items.length===state.result_count?resultsRevision:-1;
+ let snapshot=await api('results?since='+since);
+ if(snapshot.updates?.some(({index,row})=>items[index]?.path!==row.path))snapshot=await api('results?since=-1');
+ const activeChanged=Boolean(snapshot.rows||snapshot.updates.some(({index})=>index===current));
+ if(snapshot.rows)replaceResults(snapshot.rows);
+ else {
+  for(const {index,row} of snapshot.updates)items[index]=row;
+  if(!activeChanged&&coverDetailLoading===null&&coverLoadedRevision===since)coverLoadedRevision=snapshot.revision;
+ }
+ resultsRevision=snapshot.revision;
+ renderList();
+ return activeChanged;
+}
+async function updateCoverPanel(){
+ if(coverPanelUpdating)return;
+ coverPanelUpdating=true;
+ try{
+  await finishCoverMarks();
+  await syncCoverPicker();
+  await finishCoverImport();
+  await finishCoverUpscale();
+  await finishCoverWrite();
+ }catch(e){
+  if(coverPanelOpen())$('coverActionStatus').textContent='Не удалось обновить панель обложек. '+e.message;
+ }finally{
+  coverPanelUpdating=false;
+  controls();
+ }
+}
+async function poll(){if(loading)return;loading=true;try{state=await api('state');if(pendingCoverWrite&&(state.action_error||['error','stopped'].includes(state.phase)))pendingCoverWrite=null;syncStorage();if(state.ui_api_version!==UI_API_VERSION)state.warning=UPDATE_MESSAGE;$('selection').textContent=state.roots?.length?`${state.roots.join(', ')} · ${state.count} файлов`:state.count?`${state.count} аудиофайлов (выбраны отдельно)`:'Папка ещё не выбрана';$('selection').title=state.roots?.join('\n')||'';$('status').textContent=(state.total?`${state.done||0} / ${state.total} · `:'')+(state.message||'Выберите папку с музыкой')+(state.refresh_requested?' · Обновление папки запланировано после операции':'');$('status').title=$('status').textContent;$('progress').max=state.total||1;if(state.phase==='finishing')$('progress').removeAttribute('value');else $('progress').value=state.done||0;$('finalizing').hidden=state.phase!=='finishing';if(state.phase==='finishing'&&!items.length)renderList();$('appWarning').hidden=!state.warning;$('appWarning').textContent=state.warning||'';$('log').textContent=(state.ui_build?'Версия интерфейса: '+state.ui_build+'\n\n':'')+(state.log||[]).map(e=>e.kind==='progress'?`${e.stage}: ${e.file||JSON.stringify(e.details)}`:e.kind==='export'?`План сохранён: ${e.path}`:e.kind==='error'?e.message:'').filter(Boolean).join('\n');if(!state.result_count&&(items.length||pendingSelectionPaths.size)){replaceResults([]);current=-1;page=0;clearDetail();renderList()}if(state.result_count&&(items.length!==state.result_count||resultsRevision!==(state.results_revision||0))){const activeChanged=await refreshResultRows();if(activeChanged&&current>=0&&!$('editor').open&&!coverPanelOpen())await detail(current,false)}await updateEditorReleases();if(coverCommand?.quick)settleCoverCommand();void updateCoverPanel();applyAuditNavigation();if(settleWrittenSelection())renderList();await finishPendingEditor();syncPreview();if(state.phase!==lastPhase||(state.phase==='prompt'&&state.prompt?.prompt_id!==lastPromptId)){if(state.phase==='prompt'){let p=state.prompt;lastPromptId=p.prompt_id;$('reviewText').textContent=p.text;$('question').textContent=p.prompt;$('answer').value='';let opts=[...p.text.matchAll(/^\s*([0-9]+|q)\s*[—–-]\s*(.+)$/gm)].slice(-12);$('quick').replaceChildren();for(let o of opts){let b=document.createElement('button');b.textContent=o[2];b.onclick=()=>answer(o[1]);$('quick').append(b)}if(!$('review').open)$('review').showModal();$('answer').focus()}if(state.phase==='error')toast(state.message);if(state.action_error)toast(state.action_error);lastPhase=state.phase}if((state.error_revision||0)>lastErrorRevision){lastErrorRevision=state.error_revision;toast(state.action_error||state.message)}if((state.outcome_revision||0)>outcomeRevision){outcomeRevision=state.outcome_revision;renderOutcome();if(!$('outcome').open)$('outcome').showModal()}if(state.close_notice&&window.lastCloseNotice!==state.close_notice){toast(state.close_notice);window.lastCloseNotice=state.close_notice}}catch(e){$('status').textContent='Не удалось обновить интерфейс: '+e.message}finally{loading=false;settleCoverCommand();pollCoverQueueSoon();controls()}}
 for(let k of ['release_preference','cover_preference'])$(k).innerHTML='<option value="ask">Спрашивать при выборе</option><option value="prefer_single">Предпочитать сингл</option><option value="prefer_album">Предпочитать альбом / EP</option><option value="keep_current">Сохранять текущий вариант</option>';
 document.addEventListener('paste',pasteCoverEvent);$('deleteDialog').addEventListener('cancel',e=>{e.preventDefault();cancelDeletion()});$('editorRelease').addEventListener('pointerdown',beginReleasePicker);$('editorRelease').addEventListener('focus',beginReleasePicker);$('editorRelease').addEventListener('blur',endReleasePicker);$('editor').addEventListener('keydown',editorShortcut);$('review').addEventListener('cancel',e=>{e.preventDefault();cancelReview()});$('preview').addEventListener('cancel',e=>{e.preventDefault();act('discard');$('preview').close()});$('editor').addEventListener('cancel',e=>{e.preventDefault();closeEditor()});$('trackScroll').addEventListener('keydown',trackListKeydown);$('trackScroll').addEventListener('scroll',()=>requestAnimationFrame(()=>renderWindow()));document.addEventListener('keydown',e=>{if(coverPanelOpen()&&!document.querySelector('dialog[open]')){if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();if(!$('coverWriteBtn').disabled)writeChosenCover(true);return}if(e.altKey&&['ArrowUp','ArrowDown'].includes(e.key)&&state.phase==='ready'){e.preventDefault();stepCover(e.key==='ArrowUp'?-1:1);return}}if(e.key==='Escape'&&!document.querySelector('dialog[open]')){if($('appLayout').classList.contains('sidebar-open'))toggleLibrary(false);else if(!$('appLayout').classList.contains('inspector-hidden'))toggleInspector(false)}if(e.key==='F5'){e.preventDefault();if(!$('refreshBtn').disabled||['delete','undo_delete','refresh'].includes(state.local_operation))refreshFolder()}});hint();renderList();poll();setInterval(poll,1200);
 </script></html>

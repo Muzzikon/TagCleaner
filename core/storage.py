@@ -7,7 +7,7 @@ from pathlib import Path
 from contextlib import closing
 from core.cache_utils import atomic_write_json
 
-ARTWORK_LIMIT = 512 * 1024 * 1024
+ARTWORK_LIMIT = 1024 * 1024 * 1024
 ARTWORK_DAYS = 7
 
 
@@ -21,7 +21,7 @@ def safe_files(folder):
             if not path.is_symlink() and path.resolve().is_relative_to(folder.resolve()): yield path
 
 
-def available_artwork(state, root):
+def available_artwork(state, root, *, keep_choice=None):
     result = dict(state or {})
     cache = Path(root)/'cache/covers'
     def exists(key): return isinstance(key,str) and re.fullmatch('[a-f0-9]{64}',key) and (cache/(key+'.image')).is_file()
@@ -31,10 +31,12 @@ def available_artwork(state, root):
         return (isinstance(c.get('id'),str) and re.fullmatch('[a-f0-9]{64}',c['id']) and
                 not c.get('upscale') and _allowed_image_url(c.get('image_url')) and
                 isinstance(c.get('preview'),str) and c['preview'].startswith(('data:image/jpeg;base64,','data:image/png;base64,')))
-    queued = (result.get('queued') or {}).get('choice_key')
+    retained = {key for key in ((result.get('queued') or {}).get('choice_key'), keep_choice) if key}
+    embedded = result.get('current_id') if result.get('status') == 'ready' else None
     result['candidates'] = [{**c,'choice_key':artwork_choice_key(c)} for c in old
-                            if exists(c.get('id')) or recoverable(c) or (queued and artwork_choice_key(c) == queued)]
-    if not exists(result.get('current_id')): result.pop('current_id',None)
+                            if (embedded and c.get('id') == embedded) or exists(c.get('id')) or recoverable(c)
+                            or (retained and artwork_choice_key(c) in retained)]
+    if not embedded and not exists(result.get('current_id')): result.pop('current_id',None)
     if len(old)!=len(result['candidates']): result['message']='Срок хранения части вариантов истёк. Нажмите «Найти варианты», чтобы загрузить их снова.'
     return result
 
@@ -43,6 +45,15 @@ def artwork_choice_key(candidate):
     # Two editions can use the same bytes but carry different match evidence.
     from core.cache_utils import stable_digest
     return stable_digest({k:candidate.get(k) for k in ('id','source','release_id','release','artist','title','duration','needs_review','review_reason')})
+
+
+def touch_artwork(path):
+    """Keep recently opened originals near the end of the eviction order."""
+    try:
+        if time.time() - path.stat().st_mtime >= 3600:
+            os.utime(path, None)
+    except OSError:
+        pass
 
 
 def trim_artwork(root, *, limit=ARTWORK_LIMIT, max_age_days=ARTWORK_DAYS, protect=()):
@@ -99,7 +110,8 @@ def maintain(root, *, force=False, protect=()):
     errors=[];result=trim_artwork(root,protect=protect)
     try:days=max(7,float(os.environ.get('TAGCLEANER_RESUME_DAYS','7')))
     except ValueError:days=7
-    for path,cutoff in ((root/'cache/run_state.sqlite3',now-days*86400),(root/'ui_runtime/library.sqlite3',None)):
+    for path,cutoff in ((root/'cache/run_state.sqlite3',now-days*86400),
+                        (root/'ui_runtime/library.sqlite3',None),(root/'ui_runtime/cover_history.sqlite3',None)):
         try:result[path.name]=compact_database(path,cutoff)
         except (OSError,sqlite3.Error) as error:errors.append(path.name+': '+str(error))
     result.update(at=now,errors=errors)
@@ -116,7 +128,7 @@ def summary(root):
             row=groups.setdefault(key,{'bytes':0,'files':0});row['bytes']+=path.stat().st_size;row['files']+=1
         except OSError:pass
     databases=[]
-    for path in (root/'cache/run_state.sqlite3',root/'ui_runtime/library.sqlite3'):
+    for path in (root/'cache/run_state.sqlite3',root/'ui_runtime/library.sqlite3',root/'ui_runtime/cover_history.sqlite3'):
         if not path.is_file():continue
         try:
             with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=2)) as db:
