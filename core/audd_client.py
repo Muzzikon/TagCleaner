@@ -430,7 +430,7 @@ def recognize_with_audd(
     на SAFE-write.
     """
 
-    load_dotenv()
+    load_dotenv(Path(__file__).resolve().parents[1] / '.env')
 
     path = Path(
         file_path

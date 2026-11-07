@@ -17,11 +17,11 @@ from core.cache_utils import (
 )
 
 
-load_dotenv()
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / '.env')
 
 API_KEY = os.getenv("ACOUSTID_API_KEY")
 LOOKUP_URL = "https://api.acoustid.org/v2/lookup"
-ROOT_DIR = Path(__file__).resolve().parent.parent
 CACHE_DIR = ROOT_DIR / "cache" / "acoustid_lookup"
 CACHE_TTL_DAYS = cache_ttl_days("TAGCLEANER_ACOUSTID_CACHE_DAYS", 30.0)
 

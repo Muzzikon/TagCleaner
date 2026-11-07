@@ -197,7 +197,7 @@ def _clean_host(value: str | None) -> str:
 
 
 def _load_credentials() -> tuple[str, str, str]:
-    load_dotenv()
+    load_dotenv(Path(__file__).resolve().parents[1] / '.env')
 
     host = _clean_host(os.getenv("ACRCLOUD_HOST"))
     access_key = (os.getenv("ACRCLOUD_ACCESS_KEY") or "").strip()
