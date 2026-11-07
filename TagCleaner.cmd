@@ -23,7 +23,11 @@ if not exist "%tagcleaner_python%" (
 "%tagcleaner_uv%" pip install --python "%tagcleaner_python%" -r requirements-windows.txt
 if errorlevel 1 goto failed
 "%tagcleaner_python%" tools\setup_audio_runtime.py
-if errorlevel 1 goto failed
+if errorlevel 1 (
+    if /i "%~1"=="--setup-only" goto failed
+    echo Audio recognition tools are incomplete. Tag and cover editing are available.
+    echo Run TagCleaner.cmd --setup-only later to retry the audio tools.
+)
 type nul > "runtime\setup-v1.done"
 if errorlevel 1 goto failed
 if /i "%~1"=="--setup-only" exit /b 0
