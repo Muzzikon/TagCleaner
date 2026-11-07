@@ -1,0 +1,16 @@
+/.env*
+/.venv*/
+/.audio-bootstrap/
+/runtime/
+/config/
+/cache/
+/ui_runtime/
+/backups/
+/reports/
+/desktop_build/
+/desktop_dist/
+/desktop_error.txt
+/TagCleaner.exe
+*.log
+__pycache__/
+*.py[cod]

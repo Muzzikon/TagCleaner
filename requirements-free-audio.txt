@@ -1,0 +1,6 @@
+# Optional keyless source, installed separately from the base requirements.
+# Keep the tested SDK/native interface together.
+shazamio==0.8.1
+shazamio-core==1.1.2
+# Pydub still imports audioop; Python removed it in 3.13.
+audioop-lts==0.2.2; python_version >= '3.13'

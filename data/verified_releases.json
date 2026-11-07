@@ -1,0 +1,1669 @@
+{
+  "schema": 1,
+  "editions": [
+    {
+      "source": "verified_catalog",
+      "release_id": "soundcloud:951157186",
+      "track_id": "soundcloud:725721136",
+      "title": "NSD10 VIPs",
+      "search_aliases": [
+        "Never Say Die",
+        "NSD10",
+        "NSD10 VIPs"
+      ],
+      "primary_type": "Album",
+      "secondary_types": [
+        "Compilation"
+      ],
+      "date": "2019-12-20",
+      "album_artist_credit": "Various Artists",
+      "track_title": "Under Water (VIP)",
+      "track_artist_credit": "Adair",
+      "track_number": "9",
+      "track_total": 23,
+      "source_url": "https://soundcloud.com/neversaydie/sets/nsd10-vips",
+      "source_note": "Дата взята из release_date альбома лейбла; дата публикации страницы 2019-12-23 не используется. Позиция 9/23 — порядок треков в публичном альбоме SoundCloud, не подтверждённая нумерация дискового издания. Номер диска неизвестен. Проверьте нужное издание перед записью.",
+      "verified_at": "2026-10-18",
+      "evidence": [
+        {
+          "url": "https://soundcloud.com/neversaydie/sets/nsd10-vips",
+          "facts": [
+            "is_album=true",
+            "release_date=2019-12-20",
+            "track_count=23",
+            "tracks[8].id=725721136"
+          ]
+        },
+        {
+          "url": "https://soundcloud.com/oembed?format=json&url=https%3A%2F%2Fapi.soundcloud.com%2Ftracks%2F725721136",
+          "facts": [
+            "title=Under Water VIP by Adair",
+            "author_name=Adair"
+          ]
+        },
+        {
+          "url": "https://www.albumoftheyear.org/album/332200-various-artists-nsd10-vips.php",
+          "facts": [
+            "Various Artists",
+            "Compilation",
+            "December 20, 2019"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:1",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind Original",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "duration": 347,
+      "track_number": "1",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=1",
+            "track=Snowblind Original",
+            "duration_seconds=347"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:2",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind VIP",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "duration": 248,
+      "track_number": "2",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=2",
+            "track=Snowblind VIP",
+            "duration_seconds=248"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:3",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Nightcore Edit)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "duration": 288,
+      "track_number": "3",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=3",
+            "track=Snowblind (Nightcore Edit)",
+            "duration_seconds=288"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:4",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind Re-instrumental",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "duration": 342,
+      "track_number": "4",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=4",
+            "track=Snowblind Re-instrumental",
+            "duration_seconds=342"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:5",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Xilent Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Xilent",
+      "duration": 266,
+      "track_number": "5",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=5",
+            "track=Snowblind (Xilent Remix)",
+            "duration_seconds=266"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:6",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Voltra & Emplexx Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Voltra; Emplexx",
+      "duration": 380,
+      "track_number": "6",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=6",
+            "track=Snowblind (Voltra & Emplexx Remix)",
+            "duration_seconds=380"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:7",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Teminite & Nasko Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Teminite; Nasko",
+      "duration": 229,
+      "track_number": "7",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=7",
+            "track=Snowblind (Teminite & Nasko Remix)",
+            "duration_seconds=229"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:8",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Clockvice Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Clockvice",
+      "duration": 206,
+      "track_number": "8",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=8",
+            "track=Snowblind (Clockvice Remix)",
+            "duration_seconds=206"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:9",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Nuphory Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Nuphory",
+      "duration": 307,
+      "track_number": "9",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=9",
+            "track=Snowblind (Nuphory Remix)",
+            "duration_seconds=307"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:10",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Kero Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Kero",
+      "duration": 226,
+      "track_number": "10",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=10",
+            "track=Snowblind (Kero Remix)",
+            "duration_seconds=226"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:11",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Cloudnone Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Cloudnone",
+      "duration": 206,
+      "track_number": "11",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=11",
+            "track=Snowblind (Cloudnone Remix)",
+            "duration_seconds=206"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:12",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (SØNATA Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "SØNATA",
+      "duration": 224,
+      "track_number": "12",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=12",
+            "track=Snowblind (SØNATA Remix)",
+            "duration_seconds=224"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:13",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (PIR△MID Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "PIR△MID",
+      "duration": 300,
+      "track_number": "13",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=13",
+            "track=Snowblind (PIR△MID Remix)",
+            "duration_seconds=300"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:14",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Kallyn Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Kallyn",
+      "duration": 276,
+      "track_number": "14",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=14",
+            "track=Snowblind (Kallyn Remix)",
+            "duration_seconds=276"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:15",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Simulcats Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Simulcats",
+      "duration": 241,
+      "track_number": "15",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=15",
+            "track=Snowblind (Simulcats Remix)",
+            "duration_seconds=241"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:16",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (modus & Agente.001 Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "modus; Agente.001",
+      "duration": 284,
+      "track_number": "16",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=16",
+            "track=Snowblind (modus & Agente.001 Remix)",
+            "duration_seconds=284"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:17",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Znernicus Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Znernicus",
+      "duration": 342,
+      "track_number": "17",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=17",
+            "track=Snowblind (Znernicus Remix)",
+            "duration_seconds=342"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "polyoto:POLY27",
+      "track_id": "polyoto:POLY27:18",
+      "title": "Snowblind Legacy",
+      "primary_type": "Album",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2025-08-29",
+      "album_artist_credit": "Au5 & Tasha Baxter",
+      "album_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Snowblind (Oxymore Remix)",
+      "track_artist_credit": "Au5 & Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Oxymore",
+      "duration": 183,
+      "track_number": "18",
+      "track_total": 18,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+      "source_note": "Кредит издания POLY27: Au5 и Tasha Baxter — основные артисты. В издании 2015 года иной credit: Au5 feat. Tasha Baxter. Ремиксеры не становятся гостями или Album Artist. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://polyoto.bandcamp.com/album/snowblind-legacy",
+          "facts": [
+            "release=Snowblind Legacy",
+            "release_credit=Au5, Tasha Baxter",
+            "date=2025-08-29",
+            "catalog=POLY27",
+            "position=18",
+            "track=Snowblind (Oxymore Remix)",
+            "duration_seconds=183"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "au5:snowblind-the-remixes:2015",
+      "track_id": "au5:snowblind-the-remixes:1",
+      "title": "Snowblind - The Remixes",
+      "primary_type": "",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2015-04-07",
+      "album_artist_credit": "Au5 feat. Tasha Baxter",
+      "track_title": "Snowblind (Xilent Remix)",
+      "track_artist_credit": "Au5 feat. Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " feat. "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Xilent",
+      "duration": 266,
+      "track_number": "1",
+      "track_total": 5,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://au5music.bandcamp.com/album/snowblind-the-remixes",
+      "source_note": "Издание 2015 года сохраняет feat. Tasha Baxter; совместный credit Snowblind Legacy (2025) к нему не переносится. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://au5music.bandcamp.com/album/snowblind-the-remixes",
+          "facts": [
+            "release_credit=Au5 feat. Tasha Baxter",
+            "date=2015-04-07",
+            "track=Snowblind (Xilent Remix)",
+            "duration_seconds=266"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "au5:snowblind-the-remixes:2015",
+      "track_id": "au5:snowblind-the-remixes:2",
+      "title": "Snowblind - The Remixes",
+      "primary_type": "",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2015-04-07",
+      "album_artist_credit": "Au5 feat. Tasha Baxter",
+      "track_title": "Snowblind (Fractal Remix)",
+      "track_artist_credit": "Au5 feat. Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " feat. "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Fractal",
+      "duration": 340,
+      "track_number": "2",
+      "track_total": 5,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://au5music.bandcamp.com/album/snowblind-the-remixes",
+      "source_note": "Издание 2015 года сохраняет feat. Tasha Baxter; совместный credit Snowblind Legacy (2025) к нему не переносится. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://au5music.bandcamp.com/album/snowblind-the-remixes",
+          "facts": [
+            "release_credit=Au5 feat. Tasha Baxter",
+            "date=2015-04-07",
+            "track=Snowblind (Fractal Remix)",
+            "duration_seconds=340"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "au5:snowblind-the-remixes:2015",
+      "track_id": "au5:snowblind-the-remixes:3",
+      "title": "Snowblind - The Remixes",
+      "primary_type": "",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2015-04-07",
+      "album_artist_credit": "Au5 feat. Tasha Baxter",
+      "track_title": "Snowblind (Prismatic Remix)",
+      "track_artist_credit": "Au5 feat. Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " feat. "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Prismatic",
+      "duration": 220,
+      "track_number": "3",
+      "track_total": 5,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://au5music.bandcamp.com/album/snowblind-the-remixes",
+      "source_note": "Издание 2015 года сохраняет feat. Tasha Baxter; совместный credit Snowblind Legacy (2025) к нему не переносится. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://au5music.bandcamp.com/album/snowblind-the-remixes",
+          "facts": [
+            "release_credit=Au5 feat. Tasha Baxter",
+            "date=2015-04-07",
+            "track=Snowblind (Prismatic Remix)",
+            "duration_seconds=220"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "au5:snowblind-the-remixes:2015",
+      "track_id": "au5:snowblind-the-remixes:4",
+      "title": "Snowblind - The Remixes",
+      "primary_type": "",
+      "secondary_types": [
+        "Remix"
+      ],
+      "date": "2015-04-07",
+      "album_artist_credit": "Au5 feat. Tasha Baxter",
+      "track_title": "Snowblind (Syntact Remix)",
+      "track_artist_credit": "Au5 feat. Tasha Baxter",
+      "track_artist_credit_items": [
+        {
+          "name": "Au5",
+          "joinphrase": " feat. "
+        },
+        {
+          "name": "Tasha Baxter",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "Syntact",
+      "duration": 275,
+      "track_number": "4",
+      "track_total": 5,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://au5music.bandcamp.com/album/snowblind-the-remixes",
+      "source_note": "Издание 2015 года сохраняет feat. Tasha Baxter; совместный credit Snowblind Legacy (2025) к нему не переносится. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://au5music.bandcamp.com/album/snowblind-the-remixes",
+          "facts": [
+            "release_credit=Au5 feat. Tasha Baxter",
+            "date=2015-04-07",
+            "track=Snowblind (Syntact Remix)",
+            "duration_seconds=275"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "nsd:NSDX200",
+      "track_id": "nsd:NSDX200:1",
+      "title": "Cracks Begin To Show",
+      "primary_type": "Single",
+      "secondary_types": [],
+      "date": "2026-08-07",
+      "album_artist_credit": "Flux Pavilion, Freestylers & Belle Humble",
+      "album_artist_credit_items": [
+        {
+          "name": "Flux Pavilion",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Freestylers",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Belle Humble",
+          "joinphrase": ""
+        }
+      ],
+      "track_title": "Cracks Begin To Show",
+      "track_artist_credit": "Flux Pavilion, Freestylers & Belle Humble",
+      "track_artist_credit_items": [
+        {
+          "name": "Flux Pavilion",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Freestylers",
+          "joinphrase": " & "
+        },
+        {
+          "name": "Belle Humble",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "remixer_credit": "",
+      "duration": 198,
+      "track_number": "1",
+      "track_total": 1,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://nsd.lnk.to/nsdx200",
+      "source_note": "Отдельный релиз NSDX200: Flux Pavilion, Freestylers и Belle Humble — основные артисты. Это не переименование файла Cracks (Flux Pavilion Remix), длительность которого около 4:41; новая запись около 3:18–3:19. Юридический статус по метаданным не устанавливается.",
+      "evidence": [
+        {
+          "url": "https://nsd.lnk.to/nsdx200",
+          "facts": [
+            "credit=Flux Pavilion, Freestylers & Belle Humble",
+            "title=Cracks Begin To Show"
+          ]
+        },
+        {
+          "url": "https://www.beatport.com/track/cracks-begin-to-show/29704556",
+          "facts": [
+            "date=2026-08-07",
+            "duration=3:18",
+            "label=Never Say Die"
+          ]
+        },
+        {
+          "url": "https://music.apple.com/us/album/cracks-begin-to-show-single/6790497953",
+          "facts": [
+            "title=Cracks Begin To Show - Single",
+            "artists=Flux Pavilion, The Freestylers, Belle Humble",
+            "date=2026-08-07"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "itunes:1697584321",
+      "track_id": "itunes:1697584321:astral-projection",
+      "title": "Along the Way",
+      "primary_type": "EP",
+      "secondary_types": [],
+      "date": "2023-08-11",
+      "album_artist_credit": "12th Planet",
+      "album_artist_credit_items": [
+        {
+          "name": "12th Planet"
+        }
+      ],
+      "track_title": "Astral Projection (feat. Antiserum, Nyptane & YDG)",
+      "track_artist_credit": "12th Planet feat. Antiserum, Nyptane & YDG",
+      "track_artist_credit_items": [
+        {
+          "name": "12th Planet",
+          "joinphrase": " feat. "
+        },
+        {
+          "name": "Antiserum",
+          "joinphrase": ", "
+        },
+        {
+          "name": "Nyptane",
+          "joinphrase": " & "
+        },
+        {
+          "name": "YDG",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "duration": 174,
+      "track_number": "2",
+      "track_total": 5,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://music.apple.com/us/album/along-the-way-ep/1697584321",
+      "source_note": "Официальный канал 12th Planet и Apple Music явно указывают feat. Antiserum, Nyptane & YDG. Плоский перечень всех участников не отменяет их приглашённую роль. Дата и позиция относятся к этому конкретному изданию. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://www.youtube.com/watch?v=qZqViBRjgzE",
+          "facts": [
+            "explicit_credit=12th Planet ft. Antiserum, Nyptane & YDG"
+          ]
+        },
+        {
+          "url": "https://music.apple.com/us/song/1697584323",
+          "facts": [
+            "track_title=Astral Projection (feat. Antiserum, Nyptane, YDG)",
+            "track_artist=12th Planet"
+          ]
+        },
+        {
+          "url": "https://music.apple.com/us/album/along-the-way-ep/1697584321",
+          "facts": [
+            "release=Along the Way",
+            "release_date=2023-08-11",
+            "track_count=5"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "itunes:1695638074",
+      "track_id": "itunes:1695638074:astral-projection",
+      "title": "Astral Projection",
+      "primary_type": "Single",
+      "secondary_types": [],
+      "date": "2023-07-28",
+      "album_artist_credit": "12th Planet",
+      "album_artist_credit_items": [
+        {
+          "name": "12th Planet"
+        }
+      ],
+      "track_title": "Astral Projection (feat. Antiserum, Nyptane & YDG)",
+      "track_artist_credit": "12th Planet feat. Antiserum, Nyptane & YDG",
+      "track_artist_credit_items": [
+        {
+          "name": "12th Planet",
+          "joinphrase": " feat. "
+        },
+        {
+          "name": "Antiserum",
+          "joinphrase": ", "
+        },
+        {
+          "name": "Nyptane",
+          "joinphrase": " & "
+        },
+        {
+          "name": "YDG",
+          "joinphrase": ""
+        }
+      ],
+      "credit_roles_verified": true,
+      "duration": 174,
+      "track_number": "1",
+      "track_total": 1,
+      "disc_number": 1,
+      "disc_total": 1,
+      "source_url": "https://music.apple.com/us/album/astral-projection-feat-antiserum-nyptane-ydg-single/1695638074",
+      "source_note": "Официальный канал 12th Planet и Apple Music явно указывают feat. Antiserum, Nyptane & YDG. Плоский перечень всех участников не отменяет их приглашённую роль. Дата и позиция относятся к этому конкретному изданию. Проверено 2026-10-19.",
+      "evidence": [
+        {
+          "url": "https://www.youtube.com/watch?v=qZqViBRjgzE",
+          "facts": [
+            "explicit_credit=12th Planet ft. Antiserum, Nyptane & YDG"
+          ]
+        },
+        {
+          "url": "https://music.apple.com/us/song/1697584323",
+          "facts": [
+            "track_title=Astral Projection (feat. Antiserum, Nyptane, YDG)",
+            "track_artist=12th Planet"
+          ]
+        },
+        {
+          "url": "https://music.apple.com/us/album/astral-projection-feat-antiserum-nyptane-ydg-single/1695638074",
+          "facts": [
+            "release=Astral Projection",
+            "release_date=2023-07-28",
+            "track_count=1"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "verified:chime:escapism-ep",
+      "track_id": "verified:chime:escapism-ep:4",
+      "title": "Escapism EP",
+      "primary_type": "EP",
+      "secondary_types": [],
+      "date": "2015-09-07",
+      "album_artist_credit": "Chime",
+      "track_title": "Zephyr (feat. Mona Moua)",
+      "track_artist_credit": "Chime feat. Mona Moua",
+      "track_artist_aliases": [
+        "Chime",
+        "Chime & Mona Moua",
+        "Chime & Mona Mona"
+      ],
+      "track_artist_credit_items": [
+        {
+          "name": "Chime",
+          "joinphrase": " feat. "
+        },
+        {
+          "name": "Mona Moua"
+        }
+      ],
+      "credit_roles_verified": true,
+      "track_feature_repairs": {
+        "Mona Mona": "Mona Moua"
+      },
+      "track_number": "4",
+      "track_total": 4,
+      "disc_number": 1,
+      "disc_total": 1,
+      "duration": 295,
+      "source_url": "https://music.apple.com/us/album/escapism-ep/1031506600",
+      "source_note": "Mona Moua — приглашённая участница, не Mona Mona. Кредит подтверждён страницей Chime. Дата и позиция относятся только к этому изданию. Escapism EP 2015 и Aetherborne 2023 не объединяются; близкая длительность не доказывает совпадение аудиоверсии.",
+      "verified_at": "2026-10-20",
+      "evidence": [
+        {
+          "url": "https://soundcloud.com/chimetunes/zephyr",
+          "facts": [
+            "Chime - Zephyr (ft. Mona Moua)"
+          ]
+        },
+        {
+          "url": "https://music.apple.com/us/album/escapism-ep/1031506600",
+          "facts": [
+            "2015-09-07",
+            "Escapism EP"
+          ]
+        },
+        {
+          "url": "https://www.chimetunes.net/aetherborne",
+          "facts": [
+            "Zephyr (ft. Mona Moua) — 7/17 на Aetherborne"
+          ]
+        }
+      ],
+      "release_title_aliases": [
+        "Escapism"
+      ]
+    },
+    {
+      "source": "verified_catalog",
+      "release_id": "verified:chime:aetherborne",
+      "track_id": "verified:chime:aetherborne:7",
+      "title": "Aetherborne",
+      "primary_type": "Album",
+      "secondary_types": [],
+      "date": "2023-04-25",
+      "album_artist_credit": "Chime",
+      "track_title": "Zephyr (feat. Mona Moua)",
+      "track_artist_credit": "Chime feat. Mona Moua",
+      "track_artist_aliases": [
+        "Chime",
+        "Chime & Mona Moua",
+        "Chime & Mona Mona"
+      ],
+      "track_artist_credit_items": [
+        {
+          "name": "Chime",
+          "joinphrase": " feat. "
+        },
+        {
+          "name": "Mona Moua"
+        }
+      ],
+      "credit_roles_verified": true,
+      "track_feature_repairs": {
+        "Mona Mona": "Mona Moua"
+      },
+      "track_number": "7",
+      "track_total": 17,
+      "disc_number": 1,
+      "disc_total": 1,
+      "duration": 298,
+      "source_url": "https://music.apple.com/us/album/aetherborne/1682334018",
+      "source_note": "Mona Moua — приглашённая участница, не Mona Mona. Кредит подтверждён страницей Chime. Дата и позиция относятся только к этому изданию. Escapism EP 2015 и Aetherborne 2023 не объединяются; близкая длительность не доказывает совпадение аудиоверсии.",
+      "verified_at": "2026-10-20",
+      "evidence": [
+        {
+          "url": "https://soundcloud.com/chimetunes/zephyr",
+          "facts": [
+            "Chime - Zephyr (ft. Mona Moua)"
+          ]
+        },
+        {
+          "url": "https://music.apple.com/us/album/aetherborne/1682334018",
+          "facts": [
+            "2023-04-25",
+            "Aetherborne"
+          ]
+        },
+        {
+          "url": "https://www.chimetunes.net/aetherborne",
+          "facts": [
+            "Zephyr (ft. Mona Moua) — 7/17 на Aetherborne"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "bandcamp",
+      "source_url": "https://codepandorum.bandcamp.com/album/road-to-aotd-ep",
+      "release_id": "bandcamp:https://codepandorum.bandcamp.com/album/road-to-aotd-ep",
+      "track_id": "1851268616",
+      "title": "Road to AOTD - EP",
+      "primary_type": "EP",
+      "date": "2020-04-13",
+      "album_artist_credit": "Code: Pandorum",
+      "track_title": "Incubus",
+      "track_artist_credit": "Code: Pandorum",
+      "track_number": "1",
+      "track_total": 5,
+      "source_note": "Данные публичной страницы Bandcamp. Дата относится к этому изданию; номера дисков неизвестны. Проверьте соответствие аудиофайлу перед выбором. Страница исполнителя проверена 2026-10-23. Incubus — 1/5 в Road to AOTD - EP; наличие в Art of the Devil не подтверждено.",
+      "duration": 244.875
+    },
+    {
+      "source": "itunes",
+      "release_id": "itunes:1440517514",
+      "track_id": "1440517515",
+      "source_url": "https://music.apple.com/us/album/run-away-single/1440517514?uo=4",
+      "title": "Run Away - Single",
+      "primary_type": "Single",
+      "date": "2018-11-16",
+      "album_artist_credit": "Diamond Eyes",
+      "track_title": "Run Away",
+      "track_artist_credit": "Diamond Eyes",
+      "track_number": "1",
+      "track_total": 1,
+      "disc_number": 1,
+      "disc_total": 1,
+      "duration": 219.2,
+      "source_note": "Apple Music / iTunes: сингл Diamond Eyes от 2018-11-16, 1/1. Проверено 2026-10-23. Не объединять с одноимённой записью Madnap & Ocular feat. Diamond Eyes из Paper Crane Vol. 3."
+    },
+    {
+      "source": "itunes",
+      "source_url": "https://music.apple.com/us/album/all-stars/1488697574?i=1488697578&uo=4",
+      "release_id": "itunes:1488697574",
+      "track_id": "1488697578",
+      "title": "Strapped Up EP",
+      "primary_type": "EP",
+      "secondary_types": [],
+      "date": "2019-12-06",
+      "album_artist_credit": "Madreckless",
+      "track_title": "All Stars",
+      "track_artist_credit": "Madreckless & Point.Blank",
+      "track_number": "4",
+      "track_total": 4,
+      "disc_number": 1,
+      "disc_total": 1,
+      "country": "US",
+      "duration": 192.857,
+      "track_artist_aliases": [
+        "Throwdown & Point Blank"
+      ],
+      "verified_at": "2026-10-29",
+      "source_note": "Кредит лейбла: THROWDOWN & Point Blank; текущий кредит Apple Music: Madreckless & Point.Blank. Вариант кредита подтверждён только для All Stars этой версии, не является глобальным псевдонимом. Позиция 4/4, дата и Album Artist взяты из Apple lookup конкретного EP; номер 1/4 из поискового ИИ не подтверждается.",
+      "evidence": [
+        {
+          "url": "https://music.apple.com/us/album/strapped-up-ep/1488697574",
+          "facts": [
+            "Album Artist=Madreckless",
+            "date=2019-12-06",
+            "track_count=4"
+          ]
+        },
+        {
+          "url": "https://itunes.apple.com/lookup?id=1488697574&entity=song&country=US",
+          "facts": [
+            "trackId=1488697578",
+            "trackNumber=4",
+            "trackCount=4",
+            "discNumber=1",
+            "discCount=1",
+            "trackTimeMillis=192857",
+            "track artist=Madreckless & Point.Blank"
+          ]
+        },
+        {
+          "url": "https://soundcloud.com/discipleroundtable/allstars",
+          "facts": [
+            "Label account=Disciple Round Table",
+            "credit=THROWDOWN & Point Blank",
+            "title=All Stars",
+            "released=2019-12-06"
+          ]
+        }
+      ]
+    }
+  ]
+}

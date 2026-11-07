@@ -1,0 +1,3 @@
+-r requirements.txt
+-r requirements-free-audio.txt
+pywebview==6.2.1
