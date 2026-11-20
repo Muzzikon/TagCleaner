@@ -4,5 +4,19 @@
   "files": {
     "FSRCNN_x2.pb": "366b33f0084c7b3f2bf6724f0a2c77bca94fcec9d7b6d72389d330073b380d5c",
     "FSRCNN_x4.pb": "5c68d18db561aed8ead4ffedf1b897ea615baaf60ebf6c35f8e641f8fa4a21bf"
+  },
+  "additional_models": {
+    "LapSRN_x4.pb": {
+      "source": "https://github.com/fannymonori/TF-LapSRN",
+      "commit": "fc51c90af1b5801a357abc919160d7ff4f24b997",
+      "path": "export/LapSRN_x4.pb",
+      "sha256": "d3e95c93cafae5ce5a8ed57ce9abf07f2de58da8c5d6d656b766774969835ee2"
+    },
+    "Real-ESRGAN-General-x4v3.onnx": {
+      "source": "https://huggingface.co/qualcomm/Real-ESRGAN-General-x4v3",
+      "commit": "9a4692a18a842ffcfae5092930564606b0cc57ae",
+      "path": "Real-ESRGAN-General-x4v3.onnx",
+      "sha256": "1f8ecd7af904762c1cbc7f29d43101e8c74fa1fd6355a309ef569d5df64bf9a9"
+    }
   }
 }

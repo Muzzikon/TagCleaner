@@ -1,6 +1,6 @@
 # Сторонние компоненты
 
-В исходниках и архиве приложения есть шрифт [Inter](https://rsms.me/inter/) под SIL Open Font License 1.1 ([текст](ui/fonts/OFL.txt)) и модели [FSRCNN_Tensorflow](https://github.com/Saafke/FSRCNN_Tensorflow) под Apache 2.0 ([текст](data/upscale/LICENSE.txt)). Точные хеши и ревизия моделей указаны в [манифесте](data/upscale/manifest.json).
+В исходниках и архиве приложения есть шрифт [Inter](https://rsms.me/inter/) под SIL Open Font License 1.1 ([текст](ui/fonts/OFL.txt)) и модели [FSRCNN](https://github.com/Saafke/FSRCNN_Tensorflow) и [LapSRN](https://github.com/fannymonori/TF-LapSRN) под Apache 2.0 ([текст](data/upscale/LICENSE.txt)). Для восстановления маленьких обложек используется [Real-ESRGAN General x4v3](https://github.com/xinntao/Real-ESRGAN) под BSD 3-Clause ([текст](data/upscale/REAL-ESRGAN-LICENSE.txt)). Точные хеши и ревизии моделей указаны в [манифесте](data/upscale/manifest.json).
 
 В ZIP для Windows входит загрузчик [uv](https://github.com/astral-sh/uv) версии 0.12.23. Тексты Apache 2.0 и MIT находятся рядом с ним в `runtime/licenses`.
 

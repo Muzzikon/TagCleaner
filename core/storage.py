@@ -137,4 +137,4 @@ def summary(root):
         except (OSError,sqlite3.Error):pass
     return {'cache_bytes':sum(g['bytes'] for g in groups.values()),'groups':groups,'databases':databases,
             'artwork_limit_bytes':ARTWORK_LIMIT,'artwork_days':ARTWORK_DAYS,
-            'policy':'Изображения: до 512 МиБ и 7 дней. Устаревшие этапы: срок продолжения проверки (не менее 7 дней). Музыка, резервные копии, ручные решения и аудиоотпечатки сохраняются.'}
+            'policy':'Изображения: до 1 ГиБ и 7 дней. Устаревшие этапы: срок продолжения проверки (не менее 7 дней). Музыка, резервные копии, ручные решения и аудиоотпечатки сохраняются.'}

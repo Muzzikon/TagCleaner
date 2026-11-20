@@ -1,0 +1,2 @@
+data/upscale/*.onnx binary
+data/upscale/*.pb binary

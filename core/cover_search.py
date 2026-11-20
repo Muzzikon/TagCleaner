@@ -5,6 +5,73 @@ from core.duration_policy import duration_difference
 from core.cover_query import default_query, same_cover_track
 
 
+def provider_key(source):
+    name = str(source).split(':', 1)[0].split(' · ', 1)[0].strip().casefold()
+    return {'apple music':'apple', 'musicbrainz':'musicbrainz', 'cover art archive':'musicbrainz',
+            'deezer':'deezer', 'discogs':'discogs', 'last.fm':'lastfm', 'lastfm':'lastfm',
+            'soundcloud':'soundcloud'}.get(name)
+
+
+def retry_providers(state):
+    """None requests a full retry; an empty list has no automatically recoverable issue."""
+    if state.get('diagnosis_outcome') in ('cancelled', 'outdated'):
+        return None
+    errors = state.get('errors') or []
+    if not errors:
+        return None if state.get('diagnosis_outcome') in ('error', 'incomplete', 'partial') else []
+    terminal = r'JPEG/PNG|мегапиксел|больше 16 МиБ|http_401|api_(?:4|10|26)\b|disabled_or_missing_key|источник отключён'
+    providers = set()
+    for warning in errors:
+        if re.search(terminal, warning, re.I):
+            continue
+        provider = provider_key(warning)
+        if provider is None:
+            return None
+        providers.add(provider)
+    return sorted(providers)
+
+
+def format_cover_warnings(warnings):
+    """Group optional catalog outages and format both current and cached warnings."""
+    messages = []
+    unavailable = set()
+    outages = 0
+    for warning in warnings:
+        match = re.fullmatch(
+            r'(?:(?:Discogs|Last\.fm): )?(discogs|lastfm): (?:paused_)?(network_error|rate_limit|http_5\d{2}|http_403_access_denied)',
+            warning, re.IGNORECASE,
+        )
+        if match:
+            provider, code = (value.lower() for value in match.groups())
+            source = 'Discogs' if provider == 'discogs' else 'Last.fm'
+            unavailable.add(source)
+            outages += 1
+            reason = {
+                'network_error': 'не удалось подключиться',
+                'rate_limit': 'достигнут лимит запросов',
+                'http_403_access_denied': 'сервис отклонил запрос (HTTP 403)',
+            }.get(code, 'временный сбой сервера')
+            warning = f'{source}: {reason}. Можно повторить поиск позже.'
+        else:
+            source_match = re.match(r'^(Deezer|SoundCloud|Apple Music|MusicBrainz|Cover Art Archive|Discogs|Last\.fm):\s*(.*)', warning, re.I)
+            if source_match:
+                source, detail = source_match.groups()
+                status = (re.search(r'\bHTTP[ :]+(403|429|5\d\d)\b', detail, re.I)
+                          or re.search(r'\b(403|429|5\d\d) (?:Client|Server) Error\b', detail, re.I))
+                transient = re.search(r'время ожидания|времени ожидания|истекло время|timed? ?out|timeout|ошибка соединения|не удалось (?:подключиться|соединиться|дождаться)|ConnectionError|ConnectionPool|DNS:|временный сбой сервера|достигнут лимит запросов', detail, re.I)
+                if status or transient:
+                    unavailable.add(source)
+                    outages += 1
+                    code = status.group(1) if status else None
+                    reason = ('сервис отклонил запрос (HTTP 403)' if code == '403' else
+                              'достигнут лимит запросов (HTTP 429)' if code == '429' else
+                              'временный сбой сервера' if code else 'не удалось дождаться ответа сервиса')
+                    if not detail.endswith('Можно повторить поиск позже.'):
+                        warning = f'{source}: {reason}. Можно повторить поиск позже.'
+        messages.append(warning)
+    return list(dict.fromkeys(messages)), sorted(unavailable), bool(outages and outages == len(messages))
+
+
 def match_evidence(data, artist, title, duration):
     identity = same_cover_track(data.get('artist',''), data.get('title',''), artist, title)
     difference = duration_difference(data.get('duration'), duration)
@@ -73,20 +140,25 @@ def _discover(artist, title, album='', progress=None, cancelled=None, provider='
     return results, errors
 
 
-def discover(artist, title, album='', progress=None, cancelled=None):
+def discover(artist, title, album='', progress=None, cancelled=None, *, providers=None):
     """Overlap independent providers while preserving each provider's throttle."""
     from core import cover_catalogs
     from core import cover_pages
     cancelled=cancelled or (lambda:False)
+    requested = set(providers) if providers is not None else None
+    def selected(provider):
+        return requested is None or provider in requested
     with ThreadPoolExecutor(max_workers=6,thread_name_prefix='cover-catalog') as pool:
         publication_version=bool(re.search(r'\b(remix|bootleg|edit|flip|vip|mashup)\b',title,re.I))
         futures = [(label, pool.submit(_discover, artist, title, '', progress, cancelled, provider))
-                   for label, provider in (('Apple Music', 'apple'), ('MusicBrainz', 'musicbrainz'))]
-        if cover_catalogs.deezer_enabled():
+                   for label, provider in (('Apple Music', 'apple'), ('MusicBrainz', 'musicbrainz'))
+                   if selected(provider)]
+        if selected('deezer') and cover_catalogs.deezer_enabled():
             futures.append(('Deezer', pool.submit(cover_catalogs.search_deezer, artist, title, cancelled)))
         for provider in cover_catalogs.extra_providers():
-            futures.append((provider, pool.submit(getattr(cover_catalogs,'search_'+provider), artist, title, cancelled)))
-        public_future=pool.submit(cover_pages.search_soundcloud,artist,title,cancelled) if cover_pages.soundcloud_enabled() and publication_version else None
+            if selected(provider):
+                futures.append((provider, pool.submit(getattr(cover_catalogs,'search_'+provider), artist, title, cancelled)))
+        public_future=pool.submit(cover_pages.search_soundcloud,artist,title,cancelled) if selected('soundcloud') and cover_pages.soundcloud_enabled() and (publication_version or requested is not None) else None
         # Keep the original source order, regardless of which service is faster.
         results,errors=[],[]
         for label, future in futures:
@@ -97,7 +169,7 @@ def discover(artist, title, album='', progress=None, cancelled=None):
                 continue
             results.extend(rows)
             errors.extend(warnings)
-        if cover_pages.soundcloud_enabled() and not cancelled() and (public_future is not None or not results):
+        if selected('soundcloud') and cover_pages.soundcloud_enabled() and not cancelled() and (public_future is not None or not results):
             if public_future is None:public_future=pool.submit(cover_pages.search_soundcloud,artist,title,cancelled)
             try:
                 rows, warnings = public_future.result()
@@ -106,5 +178,12 @@ def discover(artist, title, album='', progress=None, cancelled=None):
             else:
                 errors.extend(warnings)
                 results = rows + results if publication_version else results + rows
+        if requested is not None:
+            enabled = {'apple', 'musicbrainz', *cover_catalogs.extra_providers()}
+            if cover_catalogs.deezer_enabled(): enabled.add('deezer')
+            if cover_pages.soundcloud_enabled(): enabled.add('soundcloud')
+            names = {'deezer':'Deezer', 'discogs':'Discogs', 'lastfm':'Last.fm', 'soundcloud':'SoundCloud'}
+            errors.extend(names.get(provider, provider)+': источник отключён или ключ не настроен.'
+                          for provider in sorted(requested-enabled))
     if album.strip():results.sort(key=lambda row:album.casefold() not in (row.get('release') or '').casefold())
     return results,errors

@@ -1,5 +1,6 @@
 """Optional text discovery. These providers never constitute audio evidence."""
 import hashlib
+import math
 import os
 import re
 import threading
@@ -54,6 +55,17 @@ def reset_state():
         with _locks[p]:
             _state[p].update(last=0.0, blocked=None, until=0.0, requests=0, cache_hits=0, errors=0,
                              last_http_status=None, last_api_error=None, last_body_kind=None)
+
+
+def retry_access_denied(providers):
+    """Allow one fresh access check per explicit retry, preserving rate-limit pauses."""
+    for provider in providers:
+        if provider not in _state:
+            continue
+        with _locks[provider]:
+            state = _state[provider]
+            if state['blocked'] == 'http_403_access_denied':
+                state.update(blocked=None, until=0.0)
 
 
 def _fail(provider, category, cooldown=0, permanent=False):
@@ -119,15 +131,21 @@ def _request(provider, endpoint, params, *, cache=True):
                   cooldown=0 if request_local else 60,
                   permanent=code in {'4', '10', '26'})
         if response.status_code in (401, 403):
-            _fail(provider, 'http_' + str(response.status_code) + '_access_denied', permanent=True)
+            _fail(provider, 'http_' + str(response.status_code) + '_access_denied',
+                  cooldown=300 if response.status_code == 403 else 0,
+                  permanent=response.status_code == 401)
         if response.status_code == 429:
             try:
-                cooldown = max(60.0, float(response.headers.get('Retry-After', 60)))
+                retry = float(response.headers.get('Retry-After', 60))
+                cooldown = max(60.0, retry) if math.isfinite(retry) else 60.0
             except (TypeError, ValueError):
                 cooldown = 60.0
             _fail(provider, 'rate_limit', cooldown=cooldown)
         if response.status_code != 200:
-            _fail(provider, 'http_' + str(response.status_code), cooldown=60)
+            # A removed release is a property of this URL, not an outage of
+            # the entire catalog. Other releases must remain searchable.
+            _fail(provider, 'http_' + str(response.status_code),
+                  cooldown=0 if response.status_code in (404, 410) else 60)
         if state['last_body_kind'] == 'non_json':
             _fail(provider, 'invalid_json', cooldown=60)
         if not isinstance(payload, dict):
@@ -160,7 +178,12 @@ def _request(provider, endpoint, params, *, cache=True):
         if not valid:
             _fail(provider, 'invalid_schema', cooldown=60)
         if cache:
-            atomic_write_json(path, {'empty': empty, 'payload': payload})
+            try:
+                atomic_write_json(path, {'empty': empty, 'payload': payload})
+            except OSError:
+                # An optional cache cannot turn a valid server response into
+                # a failed lookup (read-only disk, antivirus or no free space).
+                pass
         return payload
 
 

@@ -8,6 +8,7 @@ import os
 import sys
 import threading
 import _thread
+from collections import Counter
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -81,7 +82,7 @@ builtins.input = ask
 
 def main():
     global library_cache
-    emit('started', pid=os.getpid(), ui_api_version=51)
+    emit('started', pid=os.getpid(), ui_api_version=56)
     request = json.loads(sys.stdin.readline())
     from core.library_cache import LibraryCache
     library_cache = LibraryCache(ROOT/'ui_runtime/library.sqlite3')
@@ -248,7 +249,11 @@ def main():
                     raise ValueError('Выберите треки для обложек.')
                 failures = []
                 partial = 0
+                incomplete = 0
+                unavailable_sources = Counter()
+                warning_counts = Counter()
                 prepared_tracks=0
+                not_found_tracks=0
                 candidate_count=0
                 processed = 0
                 written_paths=[]
@@ -265,23 +270,93 @@ def main():
                 queue_only = action in ('cover_queue', 'cover_unqueue')
                 last_update = 0.0
                 cancelled=lambda:(ROOT/'ui_runtime/cover_stop').exists()
-                context=CoverSearchBatch(results,indices,command.get('query') if action=='cover_search' else None,
-                    progress=lambda i,message:emit('progress',stage='cover_search',file=results[i].get('file','')+': '+message),cancelled=cancelled) if action in ('cover_search','cover_diagnose') and len(set(indices))>1 else nullcontext(None)
+                query = command.get('query') if action == 'cover_search' else None
+                refreshing = action == 'cover_search' and command.get('restore_originals') is True
+                retrying = action == 'cover_search' and command.get('retry_failed_sources') is True
+                refresh_downloads = BatchArtworkDownloads() if refreshing else None
+                retained_choices = {}
+                saved_queries = {}
+                provider_filters = {}
+                restored_originals = 0
+                work = list(dict.fromkeys(indices))
+                if retrying:
+                    from core.cover_search import retry_providers
+                    from core.extra_catalogs import retry_access_denied
+                    retryable = []
+                    sources = set()
+                    for index in work:
+                        previous = covers.attach(results[index])
+                        providers = retry_providers(previous)
+                        if providers == []:
+                            processed += 1
+                            count = len(previous.get('candidates') or [])
+                            prepared_tracks += bool(count)
+                            candidate_count += count
+                            continue
+                        provider_filters[index] = providers
+                        saved_queries[index] = previous.get('query')
+                        retryable.append(index)
+                        sources.update(providers if providers is not None else ('discogs', 'lastfm'))
+                    work = retryable
+                    retry_access_denied(sources)
+                if refreshing:
+                    verified = set()
+                    work = []
+                    for position, index in enumerate(dict.fromkeys(indices)):
+                        if cancelled():
+                            break
+                        data = results[index]
+                        if position % 8 == 0:
+                            emit('progress', stage='cover_search', file='Проверяем сохранённые оригиналы: '+data.get('file',''),
+                                 details={'done':processed,'total':len(indices)})
+                        try:
+                            keep, restored, needs_search = covers.restore_originals(data, refresh_downloads, verified, cancelled)
+                        except (OSError, ValueError):
+                            keep, restored, needs_search = set(), 0, True
+                        restored_originals += restored
+                        if cancelled():
+                            break
+                        if needs_search:
+                            work.append(index)
+                            retained_choices[index] = keep
+                            saved_queries[index] = (data.get('_ui_cover') or {}).get('query')
+                        else:
+                            prepared_tracks += 1
+                            candidate_count += len(data['_ui_cover']['candidates'])
+                            processed += 1
+                            if restored:
+                                updates.append({'index': index, 'item': data})
+                                if len(updates) >= 8:
+                                    emit('cover_updates', updates=updates)
+                                    updates = []
+                    emit('progress', stage='cover_search', file='Проверка сохранённых оригиналов завершена.',
+                         details={'done':processed,'total':len(indices)})
+                context=CoverSearchBatch(results,work,query,
+                    progress=lambda i,message:emit('progress',stage='cover_search',file=results[i].get('file','')+': '+message),
+                    cancelled=cancelled,queries=saved_queries,downloads=refresh_downloads,
+                    provider_filters=provider_filters) if searching and (len(work)>1 or refreshing and work) and not cancelled() else nullcontext(None)
+                researched_tracks = 0
                 with context as batch:
-                    for index in dict.fromkeys(indices):
+                    for index in work:
                         if (searching or action == 'cover_commit') and cancelled():
                             break
                         data = results[index]
                         try:
-                            if action in ('cover_search','cover_diagnose'):
-                                cover_state=covers.search(data,command.get('query') if action=='cover_search' else None,
+                            if searching:
+                                researched_tracks += 1
+                                cover_state=covers.search(data,query or saved_queries.get(index),
                                     progress=lambda message:emit('progress',stage='cover_search',file=message),
                                     cancelled=cancelled,prepared=batch.result(index) if batch is not None else None,
-                                    downloads=batch.downloads if batch is not None else None)
+                                    downloads=batch.downloads if batch is not None else None,
+                                    retained_choices=retained_choices.get(index, ()),providers=provider_filters.get(index))
                                 if cover_state.get('diagnosis_outcome')=='error':failures.append(data.get('file','')+': '+'; '.join(cover_state.get('errors') or ['Поиск не завершён.']))
                                 elif cover_state.get('diagnosis_outcome')=='partial':partial+=1
+                                elif cover_state.get('diagnosis_outcome')=='incomplete':incomplete+=1
+                                unavailable_sources.update(cover_state.get('unavailable_sources', []))
+                                warning_counts.update(cover_state.get('errors', []))
                                 count=len(cover_state.get('candidates') or [])
                                 prepared_tracks+=bool(count);candidate_count+=count
+                                not_found_tracks += not count and cover_state.get('diagnosis_outcome') == 'complete'
                             elif action == 'cover_upscale':
                                 choice=covers.upscale(data,command.get('candidate_id'),command.get('choice_key'),command.get('crop_square',False),command.get('crop_position',50))
                                 upscaled_choices[data['path']]=choice['choice_key']
@@ -297,6 +372,7 @@ def main():
                                 options = {key: command[key] for key in ('review_confirmed', 'upscale_small', 'crop_square', 'crop_position') if key in command}
                                 if choice not in (None, 'current'):
                                     options['original_blob'] = base64.b64decode(command['original_image'], validate=True)
+                                    options['original_id'] = command.get('original_id')
                                 covers.set_queued(data, choice, **options)
                                 marked_paths.append(data['path'])
                             elif action == 'cover_import':
@@ -349,7 +425,36 @@ def main():
                         emit('audit_report', **uniformity.event(results))
                     except Exception as error:
                         emit('warning', message='Не удалось обновить отчёт оформления: '+str(error))
-                emit('cover_done', operation=action,written_paths=written_paths,marked_paths=marked_paths,upscaled_choices=upscaled_choices,imported_choices=imported_choices,summary={'processed':processed,'total':len(indices),'errors':len(failures),'partial':partial,'prepared_tracks':prepared_tracks,'candidate_count':candidate_count,'cancelled':processed<len(indices) or (ROOT/'ui_runtime/cover_stop').exists(),'performance':batch.stats() if batch is not None else {}},message=('Отметки обложек сохранены: '+str(len(marked_paths)) if action=='cover_mark' else 'Обложки: обработано ' + str(processed) + ' / ' + str(len(indices))) + ('. Ошибок '+str(len(failures))+': ' + '; '.join(failures[:5]) if failures else '.') + (f' Варианты готовы для {prepared_tracks} треков ({candidate_count} изображений).' if action in ('cover_search','cover_diagnose') else '') + (f' Для {partial} треков найдены варианты, но часть источников недоступна.' if partial else ''))
+                summary = {
+                    'processed': processed, 'total': len(indices), 'errors': len(failures),
+                    'partial': partial, 'incomplete': incomplete,
+                    'unavailable_sources': dict(unavailable_sources), 'prepared_tracks': prepared_tracks,
+                    'candidate_count': candidate_count,
+                    'not_found_tracks': not_found_tracks,
+                    'cancelled': processed < len(indices) or cancelled(),
+                    'performance': batch.stats() if batch is not None else {},
+                }
+                if searching:
+                    summary['error_details'] = failures[:5]
+                    summary['warning_details'] = [message+f' — треков: {count}'
+                                                  for message, count in warning_counts.most_common(12)]
+                    message = f'Обложки: {processed} из {len(indices)}. С вариантами: {prepared_tracks}.'
+                    if refreshing:
+                        summary.update(restored_originals=restored_originals, researched_tracks=researched_tracks)
+                        message += f' Восстановлено оригиналов: {restored_originals}. Поиск в каталогах: {researched_tracks}.'
+                    if unavailable_sources:
+                        sources = ', '.join(f'{source} ({count})' for source, count in sorted(unavailable_sources.items()))
+                        message += f' Сбои источников: {sources}.'
+                    if incomplete:
+                        message += f' Нужен повторный поиск: {incomplete}.'
+                    if failures:
+                        message += f' Ошибок: {len(failures)}.' if len(indices) > 1 else ' ' + failures[0]
+                else:
+                    message = (f'Отметки обложек сохранены: {len(marked_paths)}' if action == 'cover_mark'
+                               else f'Обложки: обработано {processed} / {len(indices)}')
+                    message += f'. Ошибок {len(failures)}: ' + '; '.join(failures[:5]) if failures else '.'
+                emit('cover_done', operation=action, written_paths=written_paths, marked_paths=marked_paths,
+                     upscaled_choices=upscaled_choices, imported_choices=imported_choices, summary=summary, message=message)
             elif action == 'release_search':
                 index=command['index'];data=results[index]
                 from core.release_discovery import discover
@@ -357,6 +462,22 @@ def main():
                     progress=lambda message:emit('progress',stage='release_search',file=message))
                 data['_ui_extra_releases']=contexts
                 emit('releases_found',index=index,item=data,warnings=warnings)
+            elif action == 'tag_recheck':
+                from ui.editor import check_saved_tags
+                indices = command.get('indices', [])
+                if not indices or any(type(i) is not int or not 0 <= i < len(results) for i in indices):
+                    raise ValueError('Выберите треки для проверки тегов.')
+                indices = list(dict.fromkeys(indices))
+                def tag_progress(done, total, path):
+                    if done % 20 == 0 or done == total:
+                        emit('progress', stage='tag_recheck', file=Path(path).name,
+                             details={'done': done, 'total': total})
+                checks = check_saved_tags([results[i] for i in indices], uniformity.rules, tag_progress)
+                for index, check in zip(indices, checks):
+                    results[index]['_ui_tag_check'] = check
+                emit('tag_rechecked', updates=[{'index':i, 'check':c} for i,c in zip(indices,checks)],
+                     count=len(checks), flagged=sum(bool(c['issues']) and not c['error'] for c in checks),
+                     errors=sum(c['error'] for c in checks))
             elif action == 'audit':
                 try:
                     updated=uniformity.run(command['files'],results,command.get('rules'),audit_progress,audit_cancel,drafts,written_store)

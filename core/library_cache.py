@@ -28,7 +28,7 @@ class LibraryCache:
             signature = original.get('analysis_file_signature')
             if not signature or original.get('_audit_error') or original.get('_ui_write_recheck_required'):
                 continue
-            data = {k:v for k,v in original.items() if k not in ('_ui_draft', '_ui_draft_warning', '_ui_audit')}
+            data = {k:v for k,v in original.items() if k not in ('_ui_draft', '_ui_draft_warning', '_ui_audit', '_ui_tag_check')}
             data['_library_decision_version'] = DECISION_COMPAT_VERSION
             payload=json.dumps(data, ensure_ascii=False, default=str).encode('utf-8')
             rows.append((signature['path'], sqlite3.Binary(zlib.compress(payload,1))))

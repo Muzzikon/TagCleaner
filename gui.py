@@ -21,8 +21,8 @@ sys.path.insert(0, str(ROOT))
 PYTHON = str(ROOT / '.venv-audio' / 'Scripts' / 'python.exe') if getattr(sys, 'frozen', False) else sys.executable
 os.chdir(ROOT)
 TOKEN = secrets.token_urlsafe(32)
-UI_API_VERSION = 51
-UI_BUILD = '2026.11.08-cover-preview-recovery'
+UI_API_VERSION = 56
+UI_BUILD = '2026.11.18-selected-tag-check'
 STATE = {'phase':'idle', 'message':'Выберите папку с музыкой', 'done':0, 'total':0,
          'files':[], 'results':[], 'roots':[], 'undo_delete':'', 'prompt':None, 'operations':[], 'log':[],
          'ui_api_version':UI_API_VERSION, 'ui_build':UI_BUILD}
@@ -35,6 +35,8 @@ PREVIEW_TIMEOUT = 45
 PREVIEW_LIMIT = 32 * 1024 * 1024
 PREVIEW_LOCK = threading.Lock()
 PREVIEW_IMAGES = OrderedDict()
+PREVIEW_DIMENSIONS = {}
+PREVIEW_REFRESHED = OrderedDict()
 PREVIEW_LOADING = {}
 PREVIEW_NETWORK = threading.BoundedSemaphore(3)
 
@@ -44,16 +46,25 @@ def remember_preview(key, blob):
         PREVIEW_IMAGES[key] = blob
         PREVIEW_IMAGES.move_to_end(key)
         while len(PREVIEW_IMAGES) > 16 or sum(map(len, PREVIEW_IMAGES.values())) > PREVIEW_LIMIT:
-            PREVIEW_IMAGES.popitem(last=False)
+            old_key, _ = PREVIEW_IMAGES.popitem(last=False)
+            PREVIEW_DIMENSIONS.pop(old_key, None)
 
 
-def recover_preview(cache_key, candidate):
+def recover_preview(cache_key, candidate, *, allow_changed=False):
     """Share an in-flight request for the same original and source."""
-    source = (*cache_key, candidate.get('image_url'))
+    source = (*cache_key, candidate.get('image_url'), allow_changed)
     with PREVIEW_LOCK:
         if cache_key in PREVIEW_IMAGES:
             PREVIEW_IMAGES.move_to_end(cache_key)
             return PREVIEW_IMAGES[cache_key]
+        if allow_changed:
+            previous = PREVIEW_REFRESHED.get(source)
+            if previous is not None:
+                actual_key, expires = previous
+                if expires > time.monotonic() and actual_key in PREVIEW_IMAGES:
+                    PREVIEW_IMAGES.move_to_end(actual_key)
+                    return PREVIEW_IMAGES[actual_key]
+                del PREVIEW_REFRESHED[source]
         pending = PREVIEW_LOADING.get(source)
         owner = pending is None
         if owner:
@@ -71,6 +82,8 @@ def recover_preview(cache_key, candidate):
             raise ValueError('Сейчас загружаются другие оригиналы. Повторите попытку.')
         try:
             request = {k: candidate.get(k) for k in ('id', 'image_url', 'upscale')}
+            request['allow_changed'] = allow_changed
+            request['metadata'] = True
             restored = subprocess.run(
                 [PYTHON, '-X', 'utf8', '-m', 'core.cover_image_restore'],
                 input=json.dumps(request).encode('utf-8'), cwd=ROOT, capture_output=True,
@@ -82,9 +95,28 @@ def recover_preview(cache_key, candidate):
             message = restored.stderr.decode('utf-8', errors='replace').strip()
             raise ValueError(message or 'Не удалось загрузить оригинал обложки.')
         blob = restored.stdout
-        if hashlib.sha256(blob).hexdigest() != candidate['id']:
+        digest = hashlib.sha256(blob).hexdigest()
+        if digest != candidate['id'] and not allow_changed:
             raise ValueError('Изображение источника изменилось. Обновите варианты.')
-        remember_preview(cache_key, blob)
+        actual_key = (cache_key[0], digest)
+        remember_preview(actual_key, blob)
+        try:
+            dimensions = json.loads(restored.stderr.decode('utf-8'))
+            if all(type(dimensions[k]) is int and dimensions[k] > 0 for k in ('width','height')):
+                with PREVIEW_LOCK:
+                    if (cache_key[0], digest) in PREVIEW_IMAGES:
+                        PREVIEW_DIMENSIONS[(cache_key[0], digest)] = dimensions
+        except (ValueError, KeyError, TypeError, AttributeError):
+            pass
+        if digest != candidate['id']:
+            with PREVIEW_LOCK:
+                if actual_key in PREVIEW_IMAGES:
+                    # Nearby tracks from one release may still reference the
+                    # evicted digest. Only previews may reuse its replacement.
+                    PREVIEW_REFRESHED[source] = (actual_key, time.monotonic() + 60)
+                    PREVIEW_REFRESHED.move_to_end(source)
+                    while len(PREVIEW_REFRESHED) > 16:
+                        PREVIEW_REFRESHED.popitem(last=False)
         pending['blob'] = blob
         return blob
     except subprocess.TimeoutExpired:
@@ -99,7 +131,7 @@ def recover_preview(cache_key, candidate):
             pending['done'].set()
 
 
-def candidate_preview(track_path, state, candidate):
+def candidate_preview(track_path, state, candidate, *, allow_changed=False):
     from core.covers import pictures, queued_image
     from core.storage import touch_artwork
     from mutagen import File
@@ -137,13 +169,13 @@ def candidate_preview(track_path, state, candidate):
         except Exception:
             # The independently verified catalog original is still usable.
             pass
-    return recover_preview(cache_key, candidate)
+    return recover_preview(cache_key, candidate, **({'allow_changed':True} if allow_changed else {}))
 
 def send(data):
     if PROCESS is None or PROCESS.poll() is not None: raise ValueError('Процесс проверки недоступен')
     PROCESS.stdin.write(json.dumps(data, ensure_ascii=True)+'\n'); PROCESS.stdin.flush()
 
-def observe(process):
+def observe(process, preserve_visible=False):
     failure = None
     streamed=[]
     from ui.protocol import decode_event
@@ -161,11 +193,11 @@ def observe(process):
                         raise ValueError('Несовместимый ui/worker.py. Обновите все файлы последнего патча и перезапустите приложение.')
                     STATE['message']='Ядро запущено. Подготовка списка файлов…'
                 elif kind=='progress':
-                    if e['stage'] in ('cover_search','cover_write') and 'done' in e.get('details',{}):STATE.update(done=e['details']['done'],total=e['details']['total'])
+                    if e['stage'] in ('cover_search','cover_write','tag_recheck') and 'done' in e.get('details',{}):STATE.update(done=e['details']['done'],total=e['details']['total'])
                     if e['stage'] in ('audit_scanned','library_loaded'):STATE.update(done=e.get('details',{}).get('done',0),total=e.get('details',{}).get('total',0))
                     if e['stage']=='analysis_done' and STATE['phase']=='scanning':STATE['phase']='finishing'
                     if e['stage'] in ('plan_done','checkpoint_restored'): STATE['done']+=1
-                    names={'cache_maintenance':'Обслуживание временных данных','cover_search':'Проверяем обложки','cover_write':'Вшиваем обложки','release_search':'Поиск изданий','library_loaded':'Открываем локальные теги','audit_scanned':'Диагностика оформления','scanned':'Чтение тегов', 'fingerprint_done':'Аудиоотпечаток',
+                    names={'cache_maintenance':'Обслуживание временных данных','cover_search':'Проверяем обложки','cover_write':'Вшиваем обложки','tag_recheck':'Проверяем теги выделенных','release_search':'Поиск изданий','library_loaded':'Открываем локальные теги','audit_scanned':'Диагностика оформления','scanned':'Чтение тегов', 'fingerprint_done':'Аудиоотпечаток',
                            'recognition_done':'Распознавание', 'plan_done':'Решение готово',
                            'checkpoint_restored':'Восстановлено', 'prepare_started':'Подготовка',
                            'run_configuration':'Сервисы настроены', 'analysis_done':'Все треки проверены. Формируем итоговый отчёт…',
@@ -178,7 +210,7 @@ def observe(process):
                     if e['offset']==0:streamed=[]
                     if e['offset']!=len(streamed):raise ValueError('Нарушен порядок частей списка файлов.')
                     streamed.extend(e['items'])
-                    if STATE['phase']!='stopping':
+                    if STATE['phase']!='stopping' and not preserve_visible:
                         STATE['results']=streamed+STATE['results'][len(streamed):e['total']]
                         STATE['results_revision']=STATE.get('results_revision',0)+1
                         STATE.update(done=len(streamed),total=e['total'],message=f"Открываем список: {len(streamed)} / {e['total']}")
@@ -205,6 +237,16 @@ def observe(process):
                         STATE['audit_view_revision']=STATE.get('audit_view_revision',0)+1
                         STATE.update(phase='ready',done=e['summary']['checked'],total=e['summary']['checked'],message='Диагностика: отклонений '+str(e['summary']['deviations'])+', файлов проверено '+str(e['summary']['checked'])+'.',local_operation=None,audit_cancelling=False)
                 elif kind=='audit_cancelled':STATE.update(phase='ready' if STATE['results'] else 'idle',message='Диагностика отменена. Прежние результаты сохранены.',local_operation=None,audit_cancelling=False)
+                elif kind=='tag_rechecked':
+                    for update in e['updates']:
+                        STATE['results'][update['index']]['_ui_tag_check'] = update['check']
+                    revision = STATE.get('results_revision', 0) + 1
+                    STATE['results_revision'] = revision
+                    COVER_ROW_CHANGES.append((revision, tuple(update['index'] for update in e['updates'])))
+                    summary = {key:e[key] for key in ('count','flagged','errors')}
+                    message = f"Проверено тегов треков: {e['count']} · с замечаниями: {e['flagged']} · не прочитано: {e['errors']}."
+                    STATE.update(phase='ready', message=message, action_error=None, tag_check_summary=summary,
+                                 done=e['count'], total=e['count'])
                 elif kind=='releases_found':
                     STATE['results'][e['index']]=e['item']
                     STATE['results_revision']=STATE.get('results_revision',0)+1
@@ -385,7 +427,7 @@ def sync_collection(files,results,previous,message):
     timer=threading.Timer(30,check_ack);timer.daemon=True;timer.start()
 
 
-def launch_worker(files, retained, mode='resume', message='Проверка завершена',audit=False,audit_rules=None):
+def launch_worker(files, retained, mode='resume', message='Проверка завершена',audit=False,audit_rules=None, *, display_snapshot=None):
     global PROCESS
     detach_worker()
     from core.cache_utils import atomic_write_json
@@ -401,9 +443,12 @@ def launch_worker(files, retained, mode='resume', message='Проверка за
     visible=retained if mode!='browse' else [
         {'path':str(p),'file':Path(p).name,'title':Path(p).stem,'_ui_loading':True,
          'change_plan':{'identity':'UNSCANNED'}} for p in files]
+    if display_snapshot is not None:
+        visible = display_snapshot
     with LOCK:
         STATE.update(files=list(files),results=visible,results_revision=STATE.get('results_revision',0)+1,
-                     path_changes={},phase='review' if mode=='browse' else ('auditing' if audit else ('scanning' if len(files)>len(retained) else 'review')),
+                     path_changes={},tag_check_summary=None,
+                     phase='review' if mode=='browse' else ('auditing' if audit else ('scanning' if len(files)>len(retained) else 'review')),
                      done=0,total=len(files) if audit else max(0,len(files)-len(retained)),prompt=None,operations=[],action_error=None,
                      message='Открываем локальные теги…' if mode=='browse' else ('Диагностика оформления…' if audit else ('Проверяем новые файлы…' if len(files)>len(retained) else 'Обновляем список…')),ready_message=message)
     persist_selection()
@@ -425,7 +470,7 @@ def launch_worker(files, retained, mode='resume', message='Проверка за
                 creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
     finally:err.close()
     with LOCK:PROCESS=process
-    threading.Thread(target=observe,args=(process,),daemon=True).start()
+    threading.Thread(target=observe,args=(process, display_snapshot is not None),daemon=True).start()
     send({'files':files,'retained_path':str(seed),'mode':mode,'preferences':load_preferences(),'audit_only':audit,'audit_rules':audit_rules,'maintain_cache':True})
 
 
@@ -639,6 +684,7 @@ def local_action(action,data):
 
 def result_row(item):
     from ui.editor import draft_matches_current, has_preview_work
+    from core.cover_search import retry_providers
 
     row = {key: item.get(key) for key in ('file','path','artist','title','remixer','_checkpoint_retry_required')}
     cover = item.get('_ui_cover') or {'status': 'pending'}
@@ -646,6 +692,7 @@ def result_row(item):
         'status','message','verification','manual_decision','confirmed_embedded','queued','write_error',
         'changed','changed_at','change_kind','checked_at','diagnosis_outcome')}
     row['cover']['candidate_count'] = len(cover.get('candidates') or [])
+    row['cover']['retry_providers'] = retry_providers(cover)
     row['audit'] = item.get('_ui_audit') if STATE.get('audit_summary') is not None else None
     row['manual_draft'] = bool(item.get('_ui_draft'))
     row['draft_matches_file'] = draft_matches_current(item)
@@ -654,6 +701,9 @@ def result_row(item):
     row['written'] = bool(item.get('_ui_written'))
     row['completion_kind'] = item.get('_ui_completion_kind', 'write')
     row['write_recheck_required'] = bool(item.get('_ui_write_recheck_required'))
+    tag_check = item.get('_ui_tag_check')
+    if tag_check and tag_check['signature'] == item.get('analysis_file_signature'):
+        row['tag_check'] = {'issues':len(tag_check['issues']), 'error':tag_check['error']}
     row['write_pending'] = has_preview_work(item)
     row['audit_write_pending'] = has_preview_work(item, uniformity=True)
     plan = item.get('change_plan') or {}
@@ -756,10 +806,15 @@ class Handler(BaseHTTPRequestHandler):
                     if key!='current' and digest!=key:raise ValueError('Встроенная обложка изменилась. Обновите папку.')
                     remember_preview((ROOT, digest), blob)
                 else:
-                    blob = candidate_preview(track_path, state, candidate)
+                    blob = candidate_preview(track_path, state, candidate, allow_changed=q.get('refresh')==['1'])
                 mime='image/png' if blob.startswith(b'\x89PNG') else 'image/jpeg'
                 info=state if current else candidate
-                self.respond({'image':'data:'+mime+';base64,'+base64.b64encode(blob).decode(),'width':info['width'],'height':info['height']})
+                digest = hashlib.sha256(blob).hexdigest()
+                with PREVIEW_LOCK:
+                    actual_info = PREVIEW_DIMENSIONS.get((ROOT, digest), info)
+                self.respond({'image':'data:'+mime+';base64,'+base64.b64encode(blob).decode(),
+                              'width':actual_info['width'],'height':actual_info['height'],
+                              'image_id':digest})
             except (ValueError,KeyError,OSError) as error:self.respond({'error':str(error)},400)
         elif self.path.startswith('/detail?'):
             from urllib.parse import parse_qs
@@ -916,16 +971,25 @@ class Handler(BaseHTTPRequestHandler):
                     if not isinstance(data.get('normalize_names'),bool):raise ValueError('Неверный формат настройки')
                     prefs.update(data);save_preferences(prefs)
                 elif action=='start':
-                    retained=[];files=list(STATE['files'])
+                    retained=[];files=list(STATE['files']);display_snapshot=None
                     if 'indices' in data:
                         ids=validate_revision(data)
                         targets={STATE['results'][i]['path'] for i in ids}
-                        retained=[r for r in STATE['results'] if r['path'] not in targets]
+                        display_snapshot=list(STATE['results'])
+                        retained=[r for r in display_snapshot if r['path'] not in targets]
                     if not files:raise ValueError('Сначала выберите музыку')
                     mode=data.get('mode')
                     if mode not in ('resume','recheck_cached','recheck'):raise ValueError('Неверный режим')
                     STATE.update(phase='review',message='Подготовка проверки…',action_error=None)
-                    background(lambda:launch_worker(files,retained,mode))
+                    background(lambda:launch_worker(files,retained,mode,display_snapshot=display_snapshot))
+                elif action=='tag_recheck':
+                    if phase!='ready':raise ValueError('Дождитесь окончания текущей операции.')
+                    ids=validate_revision(data)
+                    if PROCESS is None or PROCESS.poll() is not None or STATE.get('worker_synced') is False:
+                        raise ValueError('Рабочий список недоступен. Обновите папку перед проверкой тегов.')
+                    send({'action':'tag_recheck','indices':ids})
+                    STATE.update(phase='review',done=0,total=len(ids),action_error=None,
+                                 message='Проверяем теги выделенных треков…')
                 elif action=='last':
                     if phase in ('scanning','finishing','stopping','writing','review','prompt','preview','auditing','maintenance'):raise ValueError('Дождитесь окончания действия')
                     restore_library()
@@ -938,7 +1002,14 @@ class Handler(BaseHTTPRequestHandler):
                 elif action in ('cover_search','cover_diagnose','cover_write','cover_import','cover_source','cover_upscale','cover_mark','cover_queue','cover_unqueue','cover_commit'):
                     if phase!='ready':raise ValueError('Дождитесь окончания текущей операции.')
                     ids=validate_revision(data)
+                    if 'restore_originals' in data and (action != 'cover_search' or type(data['restore_originals']) is not bool or 'query' in data):
+                        raise ValueError('Некорректный режим обновления обложек.')
+                    if 'retry_failed_sources' in data and (action != 'cover_search' or type(data['retry_failed_sources']) is not bool
+                                                          or 'query' in data or data.get('restore_originals')):
+                        raise ValueError('Некорректный режим повтора источников.')
                     if action == 'cover_queue':
+                        if 'original_id' in data and (not isinstance(data['original_id'],str) or not re.fullmatch('[a-f0-9]{64}',data['original_id'])):
+                            raise ValueError('Некорректный оригинал обложки.')
                         choice = data.get('choice_key')
                         if choice != 'current' and (len(ids) != 1 or not isinstance(choice, str) or not re.fullmatch('[a-f0-9]{64}', choice)):
                             raise ValueError('Выберите конкретную обложку для очереди.')

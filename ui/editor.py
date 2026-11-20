@@ -32,6 +32,47 @@ def current_values(data):
     return {name: str(data.get(name) or '') for name in FIELDS}
 
 
+def check_saved_tags(records, rules, progress=None):
+    """Audit fresh tags for the requested tracks without applying any changes."""
+    from core.uniformity import audit_records, read_collection
+
+    fresh_records = read_collection([item['path'] for item in records], progress)
+    snapshots = []
+    same_snapshot = []
+    for previous, fresh in zip(records, fresh_records):
+        unchanged = bool(fresh.get('analysis_file_signature')
+                         and fresh['analysis_file_signature'] == previous.get('analysis_file_signature')
+                         and current_values(fresh) == current_values(previous))
+        same_snapshot.append(unchanged)
+        snapshot = {**previous, **fresh} if unchanged else dict(fresh)
+        snapshot.pop('_audit_stale', None)
+        if not fresh.get('_audit_error'):
+            snapshot.pop('_audit_error', None)
+        snapshots.append(snapshot)
+
+    audit = audit_records(snapshots, {**rules, 'recheck_confirmed': True, 'filename': False})
+    checks = []
+    for previous, fresh, unchanged, audit_entry in zip(records, fresh_records, same_snapshot, audit['entries']):
+        issues = [{'field': issue['field'], 'reason': issue['reason'], 'proposed': issue['proposed']}
+                  for issue in audit_entry['issues']]
+        if unchanged:
+            values = current_values(fresh)
+            plan = previous.get('change_plan') or {}
+            for field in FIELDS:
+                option = plan.get(field) or {}
+                proposed = option.get('proposed')
+                if (option.get('status') in ('SAFE', 'REVIEW') and isinstance(proposed, str)
+                        and proposed.strip() and proposed != values[field]
+                        and not any(i['field'] == field and i['proposed'] == proposed for i in issues)):
+                    issues.append({'field':field, 'reason':'Сохранённое распознавание предлагает другое значение.',
+                                   'proposed':proposed})
+        elif not fresh.get('_audit_error'):
+            issues.insert(0, {'field':'file', 'reason':'Состояние файла изменилось. Обновите папку, чтобы перечитать теги в редакторе.', 'proposed':None})
+        checks.append({'issues':issues, 'error':bool(fresh.get('_audit_error')),
+                       'signature':previous.get('analysis_file_signature')})
+    return checks
+
+
 def preferred_spellings(values,rules=None):
     """Apply explicit library choices only to the same literal spelling group."""
     from core.uniformity import group_id,credit_names,credit_replace,name_key
@@ -92,8 +133,9 @@ def release_values(data, context):
 
 
 def release_choice_reason(data,context,values,*,allow_duration_mismatch=False):
-    from core.release_credits import matches
-    if not matches(context,values.get('artist') or '',values.get('title') or ''):
+    from core.release_credits import matches, recognized_credit, matches_recognized_credit
+    artist, title = values.get('artist') or '', values.get('title') or ''
+    if not matches(context, artist, title) and not matches_recognized_credit(context, recognized_credit(data, artist, title)):
         from core.local_identity import proposal
         local=proposal(values.get('artist') or '',values.get('title') or '',data.get('file') or data['path'],values.get('remixer') or '')
         if not local or not matches(context,local['values']['artist'],local['values']['title']):
@@ -161,7 +203,7 @@ def editor_diagnostics(data, entered, context=None, rules=None, field=None, use_
     """Recompute read-only suggestions for the current, unsaved editor state."""
     from core.uniformity import audit_records
     from core.release_titles import same_album
-    from core.release_credits import matches, authority
+    from core.release_credits import matches, authority, recognized_credit, matches_recognized_credit
     from core.album_artist import proposal
     from core.editor_identity import format_identity
     if not isinstance(entered,dict) or set(entered)!=set(FIELDS):
@@ -219,6 +261,11 @@ def editor_diagnostics(data, entered, context=None, rules=None, field=None, use_
         # credit before supplying any missing coauthors or guests.
         identity_input={**entered,**filename['values']}
         working.update(filename['values'])
+    if apply_release and not matches(context, identity_input['artist'], identity_input['title']):
+        recognized = recognized_credit(data, original['artist'], original['title'])
+        if matches_recognized_credit(context, recognized):
+            identity_input = {**entered, **recognized}
+            working.update(recognized)
     if candidate:
         candidate_work={**working,**candidate['values']}
         corroboration=authority(candidate_work,candidate['values']['artist'],candidate['values']['title'],allow_duration_mismatch=context is not None)

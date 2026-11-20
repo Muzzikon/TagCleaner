@@ -89,18 +89,16 @@ def atomic_write_json(path: Path, payload: Any) -> None:
 
 
 def read_json_if_fresh(path: Path, *, ttl_days: float | None = DEFAULT_TTL_DAYS):
-    if not path.exists():
-        return None
-
-    if ttl_days is not None:
-        max_age = max(0.0, float(ttl_days)) * 86400.0
-        age = time.time() - path.stat().st_mtime
-        if age > max_age:
-            return None
-
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+        # Read age and contents through the same handle: maintenance and
+        # concurrent writers may remove or replace the pathname at any moment.
+        with path.open('r', encoding='utf-8') as handle:
+            if ttl_days is not None:
+                max_age = max(0.0, float(ttl_days)) * 86400.0
+                if time.time() - os.fstat(handle.fileno()).st_mtime > max_age:
+                    return None
+            return json.load(handle)
+    except (OSError, ValueError, UnicodeError):
         return None
 
 

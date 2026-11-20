@@ -27,6 +27,53 @@ def matches(context,artist,title):
             if not same_names([repairs.get(key(n),n) for n in featured],expected):return False
     return any(c and same_track(artist,title,c,context.get('track_title') or '',known_entities=known) for c in credits)
 
+def recognized_credit(data, artist, title):
+    """Use a current SAFE recognition plan to complete missing local credits."""
+    from core.recording_credit import roles, same_names
+    from core.release_discovery import same_track
+
+    plan = data.get('change_plan') or {}
+    if plan.get('identity') != 'SAFE' or not artist or not title:
+        return None
+    credit = {}
+    for field, entered in (('artist', artist), ('title', title)):
+        current = str(data.get(field) or '')
+        decision = plan.get(field) or {}
+        if key(entered) != key(current) or decision.get('current') != current:
+            return None
+        if decision.get('status') not in ('SAFE', 'KEEP'):
+            return None
+        credit[field] = decision.get('proposed') if decision['status'] == 'SAFE' else current
+        if not credit[field]:
+            return None
+
+    def included(names, candidates):
+        return all(any(same_names([name], [candidate]) for candidate in candidates) for name in names)
+
+    primary, names = roles(artist, title)
+    confirmed_primary, confirmed_names = roles(credit['artist'], credit['title'])
+    guests = [name for name in names if name not in primary]
+    confirmed_guests = [name for name in confirmed_names if name not in confirmed_primary]
+    if not primary or not included(primary, confirmed_primary) or not included(guests, confirmed_guests):
+        return None
+    if same_names(names, confirmed_names) or not same_track(credit['artist'], title, credit['artist'], credit['title']):
+        return None
+    return credit
+
+
+def matches_recognized_credit(context, credit):
+    if not credit or not matches(context, credit['artist'], credit['title']):
+        return False
+    from core.recording_credit import roles, same_names
+
+    source = parse(context)
+    if source.get('conflict'):
+        return False
+    known = source['primary'] + source['featured'] + source['aliases']
+    _, confirmed_names = roles(credit['artist'], credit['title'], known)
+    return same_names(confirmed_names, source['primary'] + source['featured'])
+
+
 def parse(context,current=False):
     items=context.get('track_artist_credit_items') or []
     primary_aliases=[];aliases=[];entity_names={}

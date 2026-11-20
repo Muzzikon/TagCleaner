@@ -23,7 +23,7 @@ def soundcloud_enabled():
     return os.getenv('TAGCLEANER_COVER_SOUNDCLOUD','1').lower().strip() in ('1','true','yes','on')
 
 
-from core.cover_urls import source_url
+from core.cover_urls import source_url, _allowed_image_url
 
 
 def _soundcloud_text(url,params=None):
@@ -60,20 +60,53 @@ def _identity(raw_title):
     return '',value
 
 
+def _soundcloud_artwork(url):
+    p = urlparse(url)
+    host = p.hostname or ''
+    return (_allowed_image_url(url) and (host == 'sndcdn.com' or host.endswith('.sndcdn.com'))
+            and bool(re.match(r'/artworks?-', p.path)))
+
+
 def _soundcloud_row(url):
-    payload=json.loads(_soundcloud_text('https://soundcloud.com/oembed',{'url':url,'format':'json'}))
+    try:
+        payload=json.loads(_soundcloud_text('https://soundcloud.com/oembed',{'url':url,'format':'json'}))
+    except requests.HTTPError as error:
+        if error.response is None or error.response.status_code != 403:
+            raise
+        payload = {}
     if not isinstance(payload,dict):raise ValueError('Некорректный ответ SoundCloud.')
     image=str(payload.get('thumbnail_url') or '')
-    p=urlparse(image)
-    # oEmbed can substitute the uploader's avatar when a track has no artwork.
-    if not p.hostname or not (p.hostname=='sndcdn.com' or p.hostname.endswith('.sndcdn.com')) or not re.match(r'/artworks?-',p.path):
-        raise MissingPublicationArtwork('У публикации SoundCloud нет доступной обложки трека; аватар автора не используется.')
+    is_set = '/sets/' in urlparse(url).path
+    # oEmbed can substitute the uploader's avatar when a publication has no artwork.
+    if not _soundcloud_artwork(image):
+        from core.source_url_resolver import _MetaParser
+        meta = _MetaParser()
+        meta.feed(_soundcloud_text(url))
+        if not payload.get('title'):
+            payload['title'] = meta.meta.get('og:title') or meta.meta.get('twitter:title') or ''
+        image = ''
+        for key in ('og:image', 'twitter:image'):
+            value = meta.meta.get(key, '')
+            if _soundcloud_artwork(value):
+                image = value
+                break
+    if not _soundcloud_artwork(image):
+        raise MissingPublicationArtwork('У публикации SoundCloud нет доступной обложки; аватар автора не используется.')
     artist,title=_identity(payload.get('title') or '')
     uploader=str(payload.get('author_name') or '')
+    release = 'Публикация SoundCloud'+(' · '+uploader if uploader else '')
+    reason = 'Обложка публикации SoundCloud. Загрузивший её пользователь и конкретное издание не подтверждены; проверьте вручную.'
+    if is_set:
+        name = html.unescape(str(payload.get('title') or '')).strip()
+        if ' by ' in name:
+            name = name.rsplit(' by ', 1)[0].strip()
+        release = 'Подборка SoundCloud'+(' · '+name if name else '')
+        artist, title = '', ''
+        reason = 'Обложка подборки SoundCloud. Она может относиться ко всей подборке или первому треку. Проверьте соответствие выбранному треку и версии вручную.'
     return {'image_url':image,'source':'SoundCloud','source_url':url,'release_id':'soundcloud:'+url,
-            'release':'Публикация SoundCloud'+(' · '+uploader if uploader else ''),
+            'release':release,
             'artist':artist,'title':title,'duration':None,
-            'review_reason':'Обложка публикации SoundCloud. Загрузивший её пользователь и конкретное издание не подтверждены; проверьте вручную.'}
+            'review_reason':reason}
 
 
 class _SearchPage(HTMLParser):
@@ -85,7 +118,7 @@ class _SearchPage(HTMLParser):
         if tag=='a' and self.in_noscript:
             try:
                 self.link=source_url(urljoin('https://soundcloud.com',dict(attrs).get('href','')))
-                if urlparse(self.link).hostname!='soundcloud.com':self.link=None
+                if urlparse(self.link).hostname!='soundcloud.com' or '/sets/' in urlparse(self.link).path:self.link=None
             except ValueError:self.link=None
             self.parts=[]
 
@@ -98,9 +131,17 @@ class _SearchPage(HTMLParser):
         if tag=='noscript':self.in_noscript=False
 
 
+def _publication_match(artist, title, credit, song):
+    from core.cover_catalogs import related_choice
+    # Possessives in a version caption do not identify a different remix author.
+    possessive = r"((?:\(|\[)[^()\[\]]+?)[’']s(\s+(?:remix|mix|edit|bootleg|flip|vip)\b[^()\[\]]*[)\]])"
+    title = re.sub(possessive, r'\1\2', title, flags=re.I)
+    song = re.sub(possessive, r'\1\2', song, flags=re.I)
+    return related_choice(artist, title, credit, song)
+
+
 def search_soundcloud(artist,title,cancelled=lambda:False):
     if not soundcloud_enabled() or cancelled():return [],[]
-    from core.cover_catalogs import related_choice
     from core.recording_credit import roles
     from core.release_credits import remove_primary_features
     query_title=remove_primary_features(title,roles(artist,title)[1])
@@ -114,12 +155,12 @@ def search_soundcloud(artist,title,cancelled=lambda:False):
         for url,caption in page.rows:
             if cancelled() or len(seen)>=3:break
             credit,song=_identity(caption)
-            if url in seen or not credit or not related_choice(artist,title,credit,song):continue
+            if url in seen or not credit or not _publication_match(artist,title,credit,song):continue
             seen.add(url)
             try:
                 row=_soundcloud_row(url)
                 # Validate actual publication metadata again, not only search text.
-                if row['artist'] and related_choice(artist,title,row['artist'],row['title']):rows.append(row)
+                if row['artist'] and _publication_match(artist,title,row['artist'],row['title']):rows.append(row)
             except MissingPublicationArtwork:continue
             except Exception as error:errors.append('SoundCloud: '+str(error))
     except Exception as error:errors.append('SoundCloud: '+str(error))

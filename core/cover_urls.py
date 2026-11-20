@@ -36,10 +36,10 @@ def source_url(value):
         if p.scheme!='https' or p.username or p.password or p.port not in (None,443):raise ValueError()
         host=(p.hostname or '').lower()
         if host in ('soundcloud.com','www.soundcloud.com','m.soundcloud.com'):
-            if not re.fullmatch(r'/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/?',p.path):raise ValueError()
+            if not re.fullmatch(r'/[a-zA-Z0-9_-]+/(?:sets/)?[a-zA-Z0-9_-]+/?',p.path):raise ValueError()
             if p.path.split('/')[1].lower() in ('search','discover','charts','you','stations','tags','pages'):raise ValueError()
-            if p.path.rstrip('/').split('/')[-1].lower() in ('sets','tracks','albums','reposts','likes','popular-tracks'):raise ValueError()
+            if len(p.path.rstrip('/').split('/')) == 3 and p.path.rstrip('/').split('/')[-1].lower() in ('sets','tracks','albums','reposts','likes','popular-tracks'):raise ValueError()
             return urlunparse(('https','soundcloud.com',p.path.rstrip('/'),'','',''))
         return bandcamp_source_url(value)
     except (ValueError,TypeError,AttributeError):
-        raise ValueError('Нужна HTTPS-ссылка на трек SoundCloud или страницу трека/альбома Bandcamp.') from None
+        raise ValueError('Нужна HTTPS-ссылка на трек или подборку SoundCloud либо страницу трека/альбома Bandcamp.') from None

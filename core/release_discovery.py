@@ -70,14 +70,21 @@ def discover(data,artist,title,album_query='',source_url='',progress=None):
     from core.catalog_search_resolver import search_itunes,search_musicbrainz,_request_json
     from core.musicbrainz_client import get_official_release_contexts
     from core.change_planner import _musicbrainz_for_final_identity
-    from ui.editor import release_options
     contexts=[];warnings=[]
     from core.verified_releases import find as verified_editions
-    from core.release_credits import matches
+    from core.release_credits import matches, recognized_credit
+    artist, title, album_query = (' '.join(value.split()) for value in (artist, title, album_query))
+    recognized = recognized_credit(data, artist, title)
     verified=verified_editions(artist,title)
     def compatible(other_artist,other_title):
-        return same_track(artist,title,other_artist,other_title) or any(matches(c,other_artist,other_title) for c in verified)
-    search_artists=list(dict.fromkeys([artist,*[c.get('track_artist_credit') for c in verified if c.get('track_artist_credit')]]))[:2]
+        return (same_track(artist,title,other_artist,other_title)
+                or bool(recognized and same_track(recognized['artist'],recognized['title'],other_artist,other_title))
+                or any(matches(c,other_artist,other_title) for c in verified))
+    queries = [(artist, title)]
+    if recognized and recognized != {'artist':artist, 'title':title}:
+        queries.insert(0, (recognized['artist'], recognized['title']))
+    queries += [(c['track_artist_credit'],title) for c in verified if c.get('track_artist_credit')]
+    queries = list(dict.fromkeys(queries))[:3 if len(queries)>1 and recognized else 2]
     def stage(message):
         if progress:progress(message)
     if source_url:
@@ -100,8 +107,8 @@ def discover(data,artist,title,album_query='',source_url='',progress=None):
     else:
         try:
             stage('Ищем запись в MusicBrainz по текущим исполнителю и названию')
-            for search_artist in search_artists:
-                rows=search_musicbrainz(search_artist,title,refresh=True)
+            for search_artist, search_title in queries:
+                rows=search_musicbrainz(search_artist,search_title,refresh=True)
                 recording_ids=list(dict.fromkeys(r['recording_id'] for r in rows if r.get('recording_id')
                     and compatible(r.get('artist',''),r.get('title',''))))[:3]
                 if recording_ids:break
@@ -114,8 +121,8 @@ def discover(data,artist,title,album_query='',source_url='',progress=None):
         # Album text is not part of a song title. Always discover the actual
         # recording first; use the optional album text only to rank choices.
         stage('Ищем издания в Apple Music / iTunes')
-        for search_artist in search_artists:
-            rows=search_itunes(search_artist,title,refresh=True)
+        for search_artist, search_title in queries:
+            rows=search_itunes(search_artist,search_title,refresh=True)
             rows=[r for r in rows if compatible(r.get('artist',''),r.get('title',''))]
             if rows:break
         ids=list(dict.fromkeys(str(r['collection_id']) for r in rows if r.get('collection_id')))
@@ -135,7 +142,8 @@ def discover(data,artist,title,album_query='',source_url='',progress=None):
 def merge_options(data,artist,title,album_query,contexts,warnings):
     from ui.editor import release_options
     from core.verified_releases import find as verified_editions
-    from core.release_credits import matches
+    from core.release_credits import matches, recognized_credit, matches_recognized_credit
+    recognized = recognized_credit(data, artist, title)
     verified=verified_editions(artist,title)
     contexts=[*contexts,*verified]
     # A different edited identity must not acquire old candidate editions.
@@ -155,7 +163,7 @@ def merge_options(data,artist,title,album_query,contexts,warnings):
                         if known.get(field):c.setdefault(field,known[field])
         if c.get('track_title'):
             if c.get('track_artist_credit') or c.get('track_artist_credit_items') or c.get('track_artist_aliases'):
-                if not matches(c,artist,title):continue
+                if not matches(c,artist,title) and not matches_recognized_credit(c,recognized):continue
             elif not same_track(artist,title,artist,c['track_title']):continue
         key=(c.get('source'),c.get('release_id'),c.get('track_id'),c.get('track_number'))
         if key in seen:continue

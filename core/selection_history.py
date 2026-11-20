@@ -1,4 +1,5 @@
 import json
+from core.cache_utils import atomic_write_json
 from pathlib import Path
 
 
@@ -27,16 +28,7 @@ def save_last_selection(files):
         ]
     }
 
-    with LAST_SELECTION_FILE.open(
-        "w",
-        encoding="utf-8",
-    ) as file:
-        json.dump(
-            data,
-            file,
-            ensure_ascii=False,
-            indent=2,
-        )
+    atomic_write_json(LAST_SELECTION_FILE, data)
 
 
 def load_last_selection():
@@ -53,7 +45,11 @@ def load_last_selection():
     except (
         json.JSONDecodeError,
         OSError,
+        UnicodeError,
     ):
+        return [], []
+
+    if not isinstance(data, dict) or not isinstance(data.get("files"), list):
         return [], []
 
     existing_files = []
@@ -63,9 +59,15 @@ def load_last_selection():
         "files",
         [],
     ):
+        if not isinstance(value, str) or not value.strip():
+            continue
         path = Path(value)
+        try:
+            exists = path.is_file()
+        except (OSError, ValueError):
+            exists = False
 
-        if path.is_file():
+        if exists:
             existing_files.append(path)
         else:
             missing_files.append(path)

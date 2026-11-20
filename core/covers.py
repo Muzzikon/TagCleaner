@@ -20,11 +20,11 @@ from mutagen.id3 import ID3, APIC, TextFrame
 from mutagen.flac import FLAC, Picture
 from mutagen.mp4 import MP4, MP4Cover
 from core.cache_utils import atomic_write_json, file_signature, stable_digest, mark_file_changed
+from core.singleflight import cached_singleflight
 
 MAX_IMAGE = 16 * 1024 * 1024
 _analysis_lock=threading.RLock()
 _analysis_cache={}
-_image_load_lock=threading.RLock()
 
 
 def pictures(audio):
@@ -96,7 +96,8 @@ def _download_once(url):
             try:host=urlparse(url).hostname or 'не указан'
             except (ValueError,TypeError,AttributeError):host='некорректный адрес'
             raise ValueError('Недопустимый источник обложки: '+host[:120]+'. Домен или протокол не поддерживается.')
-        with requests.get(url, timeout=(8, 18), stream=True, allow_redirects=False) as response:
+        with requests.get(url, timeout=(8, 18), stream=True, allow_redirects=False,
+                          headers={'User-Agent':'TagCleaner/13.17 (+personal music catalog lookup)'}) as response:
             if response.status_code in (301,302,303,307,308):
                 url=urljoin(url,response.headers.get('Location',''))
                 # Legacy CAA indexes still link to HTTP. Upgrade only a trusted
@@ -166,50 +167,64 @@ def artwork_error(error):
     return str(error)
 
 
-def load_candidate_image(root,candidate,downloads=None):
+def _write_cached_image(path, blob):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, suffix='.tmp', delete=False) as temporary:
+            temp_path = Path(temporary.name)
+            temporary.write(blob)
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+@cached_singleflight(lambda root, candidate, downloads=None, **kwargs:
+                     (os.path.normcase(str(Path(root).resolve())), candidate.get('id'), kwargs.get('allow_changed', False)))
+def load_candidate_image(root,candidate,downloads=None, *, trim_cache=True, allow_changed=False):
     """Restore an evicted original without repeating catalog discovery."""
     from core.storage import touch_artwork, trim_artwork
 
     key=candidate.get('id','')
     if not isinstance(key,str) or not re.fullmatch('[a-f0-9]{64}',key):raise ValueError('Обложка недоступна.')
     cache=Path(root)/'cache/covers';path=cache/(key+'.image')
-    with _image_load_lock:
-        damaged = False
-        try:
-            blob = path.read_bytes()
-            if hashlib.sha256(blob).hexdigest() == key:
-                touch_artwork(path)
-                return blob
-            damaged = True
-        except (FileNotFoundError, PermissionError):
-            pass
-        url=candidate.get('image_url')
-        if candidate.get('upscale') or not _allowed_image_url(url):raise ValueError('Оригинал обложки недоступен. Обновите варианты.')
-        try:blob=(download if downloads is None else downloads)(url)
-        except Exception as error:raise ValueError('Не удалось загрузить оригинал: '+artwork_error(error)) from None
-        if not blob:raise ValueError('Оригинал больше не доступен. Обновите варианты.')
-        # An updated remote image must never replace the user's selection.
-        if hashlib.sha256(blob).hexdigest()!=key:raise ValueError('Изображение источника изменилось. Обновите варианты и выберите обложку заново.')
-        image_info(blob)
-        # The verified bytes are usable even if Windows refuses the cache write.
-        temp_path = None
-        try:
-            if damaged or not path.is_file():
-                cache.mkdir(parents=True, exist_ok=True)
-                with tempfile.NamedTemporaryFile(dir=cache, suffix='.tmp', delete=False) as temporary:
-                    temp_path = Path(temporary.name)
-                    temporary.write(blob)
-                os.replace(temp_path, path)
+    damaged = False
+    try:
+        blob = path.read_bytes()
+        if hashlib.sha256(blob).hexdigest() == key:
+            touch_artwork(path)
+            return blob
+        damaged = True
+    except (FileNotFoundError, PermissionError):
+        pass
+    url=candidate.get('image_url')
+    if candidate.get('upscale') or not _allowed_image_url(url):raise ValueError('Оригинал обложки недоступен. Обновите варианты.')
+    try:blob=(download if downloads is None else downloads)(url)
+    except Exception as error:raise ValueError('Не удалось загрузить оригинал: '+artwork_error(error)) from None
+    if not blob:raise ValueError('Оригинал больше не доступен. Обновите варианты.')
+    # An updated remote image must never replace the user's selection.
+    actual = hashlib.sha256(blob).hexdigest()
+    if actual != key:
+        if not allow_changed:
+            raise ValueError('Изображение источника изменилось. Обновите варианты и выберите обложку заново.')
+        # A fresh preview may show the new original. Never store it under the
+        # old digest or silently replace an already queued selection.
+        key = actual
+        path = cache/(key+'.image')
+    image_info(blob)
+    # The verified bytes are usable even if Windows refuses the cache write.
+    try:
+        if damaged or not path.is_file():
+            _write_cached_image(path, blob)
+            if trim_cache:
                 trim_artwork(root, protect=[key])
-        except OSError:
-            pass
-        finally:
-            if temp_path is not None:
-                try:
-                    temp_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
-        return blob
+    except OSError:
+        pass
+    return blob
 
 
 def pixel_digest(blob):
@@ -265,7 +280,7 @@ class CoverSession:
                                 self.queued_image_paths.add(key)
             except (sqlite3.Error,ValueError):pass
 
-    def set_queued(self, data, choice=None, *, original_blob=None, **options):
+    def set_queued(self, data, choice=None, *, original_blob=None, original_id=None, **options):
         """Keep the exact selection independently of search results and cache cleanup."""
         key = os.path.normcase(str(Path(data['path']).resolve()))
         state = data.get('_ui_cover') or {}
@@ -295,8 +310,16 @@ class CoverSession:
             if candidate.get('needs_review') and options.get('review_confirmed') is not True:
                 raise ValueError('Подтвердите ручной выбор обложки с расхождениями.')
             if original_blob is not None:
-                if not 0 < len(original_blob) <= MAX_IMAGE or hashlib.sha256(original_blob).hexdigest() != candidate['id']:
+                actual = hashlib.sha256(original_blob).hexdigest()
+                if not 0 < len(original_blob) <= MAX_IMAGE or actual != (original_id or candidate['id']):
                     raise ValueError('Оригинал не совпадает с выбранной обложкой. Повторите выбор.')
+                if actual != candidate['id']:
+                    if not candidate.get('image_url') or candidate.get('upscale'):
+                        raise ValueError('Обработанная обложка изменилась. Повторите выбор.')
+                    facts = {k:v for k,v in candidate.items() if k not in ('id','choice_key','preview','width','height','mime')}
+                    candidate = self.candidate(original_blob, **facts)
+                    candidate['choice_key'] = artwork_choice_key(candidate)
+                    state['candidates'] = [candidate, *[c for c in state['candidates'] if artwork_choice_key(c) not in (choice, candidate['choice_key'])]]
                 blob = original_blob
             else:
                 blob = self.read_queued_image(data['path'])
@@ -402,6 +425,7 @@ class CoverSession:
         return state
 
     def restore_view(self, data, state, *, keep_choice=None):
+        from core.cover_search import format_cover_warnings, retry_providers
         from core.storage import available_artwork
         state=available_artwork(state,self.root,keep_choice=keep_choice)
         self.show_queued(data, state)
@@ -414,6 +438,12 @@ class CoverSession:
                    'message':'Сохранены результаты прежней версии. Обновите варианты обложки.'}
         elif state.get('diagnosis_outcome')=='error' and state.get('candidates'):
             state={**state,'diagnosis_outcome':'partial'}
+        warnings, unavailable, outage_only = format_cover_warnings(state.get('errors', []))
+        if unavailable:
+            state.update(errors=warnings, unavailable_sources=unavailable)
+            if outage_only and state.get('diagnosis_outcome') == 'error':
+                state['diagnosis_outcome'] = 'incomplete'
+        state['retry_providers'] = retry_providers(state)
         # Earlier builds saved a backup/source only after a real artwork write.
         if state.get('backup') and state.get('source') and 'changed' not in state:
             state['changed']=True
@@ -461,17 +491,105 @@ class CoverSession:
     def candidate(self, blob, **facts):
         info = image_info(blob)
         key = hashlib.sha256(blob).hexdigest()
-        self.cache.mkdir(parents=True, exist_ok=True)
         path = self.cache / (key + '.image')
         with self._artifact_lock:
-            if not path.exists():
-                path.write_bytes(blob)
-                self._new_image_bytes+=len(blob)
-            else:path.touch()
+            try:
+                cached = path.read_bytes()
+            except FileNotFoundError:
+                cached = None
+            if cached == blob:
+                path.touch()
+            else:
+                _write_cached_image(path, blob)
+                self._new_image_bytes += len(blob)
         return {**facts, **info, 'id': key}
 
-    def search(self, data, query=None, progress=None, cancelled=None,prepared=None,downloads=None):
-        from core.cover_search import discover, match_evidence, default_query
+    def restore_originals(self, data, downloads, verified, cancelled):
+        """Refresh saved choices from their original URLs before searching again."""
+        from core.storage import artwork_choice_key, touch_artwork
+
+        state = self.attach(data)
+        candidates = state.get('candidates', [])
+        queued = state.get('queued') or {}
+        usable = set()
+        restored = 0
+        attempted = set()
+        replacements = {}
+        for choice in candidates:
+            if cancelled():
+                break
+            key = choice['id']
+            if key in usable:
+                continue
+            if key == state.get('current_id') or (
+                    queued.get('choice_key') == choice['choice_key']
+                    and not queued.get('stale') and not queued.get('needs_refresh')):
+                usable.add(key)
+                continue
+            path = self.cache / (key + '.image')
+            try:
+                if key in verified and path.is_file():
+                    usable.add(key)
+                    continue
+                if hashlib.sha256(path.read_bytes()).hexdigest() == key:
+                    touch_artwork(path)
+                    usable.add(key)
+                    verified.add(key)
+                    continue
+            except OSError:
+                pass
+            request = (key, choice.get('image_url'))
+            if request in attempted or not request[1]:
+                continue
+            attempted.add(request)
+            try:
+                blob = load_candidate_image(self.root, choice, downloads, trim_cache=False, allow_changed=True)
+                actual = hashlib.sha256(blob).hexdigest()
+                path = self.cache / (actual + '.image')
+                if path.read_bytes() != blob:
+                    continue
+            except (ValueError, OSError):
+                continue
+            if actual != key:
+                replacements[request] = {**image_info(blob), 'id': actual}
+            usable.add(actual)
+            verified.add(actual)
+            restored += 1
+            self._new_image_bytes += len(blob)
+        if replacements and not cancelled():
+            if file_signature(data['path']) != state.get('signature'):
+                raise ValueError('Файл изменился во время обновления обложек.')
+            refreshed = {}
+            for choice in candidates:
+                info = replacements.get((choice['id'], choice.get('image_url')))
+                if info is not None:
+                    choice = {**choice, **info}
+                    choice['choice_key'] = artwork_choice_key(choice)
+                refreshed.setdefault(choice['choice_key'], choice)
+            candidates = list(refreshed.values())
+            state = {**state, 'candidates': candidates,
+                     'catalog_candidate_count': sum(bool(c.get('image_url')) for c in candidates)}
+            if (state.get('verification') or {}).get('status') == 'source_match':
+                state['verification'] = {'status': 'unverified', 'matches': [],
+                    'message': 'Источник обновил изображение. Текущую обложку можно сравнить с новым вариантом.'}
+            self.save(data, state)
+        self.trim_images(usable)
+        keep = {choice['choice_key'] for choice in candidates if choice['id'] in usable}
+        needs_search = (not candidates or any(choice['id'] not in usable for choice in candidates)
+                        or state.get('diagnosis_outcome') == 'outdated' or queued.get('needs_refresh'))
+        return keep, restored, needs_search
+
+    def trim_images(self, protect):
+        from core.storage import trim_artwork
+        if time.monotonic()-self._last_trim>=30 or self._new_image_bytes>=32*1024*1024:
+            try:
+                trim_artwork(self.root, protect=protect)
+                self._last_trim=time.monotonic();self._new_image_bytes=0
+            except OSError:
+                pass
+
+    def search(self, data, query=None, progress=None, cancelled=None,prepared=None,downloads=None, *, retained_choices=(), providers=None):
+        from core.cover_search import discover, match_evidence, default_query, format_cover_warnings, provider_key, retry_providers
         state = self.attach(data)
         query = query or default_query(data)
         if not query.get('artist') or not query.get('title'):
@@ -479,7 +597,13 @@ class CoverSession:
         before = file_signature(data['path'])
         if before != data.get('analysis_file_signature'):
             raise ValueError('Теги изменились. Обновите папку перед поиском обложек.')
-        rows, errors = prepared if prepared is not None else discover(query['artist'],query['title'],query.get('album',''),progress,cancelled)
+        if prepared is not None:
+            rows, errors = prepared
+        else:
+            options = {'providers': providers} if providers is not None else {}
+            rows, errors = discover(query['artist'],query['title'],query.get('album',''),progress,cancelled, **options)
+        if providers is not None and state.get('query') == query:
+            errors = [*(warning for warning in state.get('errors', []) if provider_key(warning) not in providers), *errors]
         candidates, seen, ordered = [], set(), []
         fingerprints = {}
         ready = state['status'] == 'ready'
@@ -513,7 +637,9 @@ class CoverSession:
                 if cancelled():return None
                 try:
                     blob=downloads(url) if downloads is not None else download(url)
-                    if blob is not None:return blob,url
+                    if blob is not None:
+                        image_info(blob)
+                        return blob,url
                 except Exception as error:
                     # A size fallback must not sidestep a provider rate limit.
                     response=getattr(error,'response',None)
@@ -560,17 +686,28 @@ class CoverSession:
         catalog_keys = {choice['choice_key'] for choice in candidates}
         local_choices = [choice for choice in state.get('candidates', [])
                          if not choice.get('image_url') and choice['choice_key'] not in catalog_keys]
-        choices = [*local_choices, *candidates]
+        keep_previous = (errors or interrupted or providers is not None) and state.get('query') == query
+        retained = [choice for choice in state.get('candidates', [])
+                    if choice.get('image_url') and (choice['choice_key'] in retained_choices or keep_previous)
+                    and choice['choice_key'] not in catalog_keys]
+        choices = [*local_choices, *candidates, *retained[:36-len(candidates)]]
+        errors, unavailable, outage_only = format_cover_warnings(errors)
         result = {**state,'status':'ready' if ready else 'pending' if choices or errors or interrupted else 'not_found',
-                  'candidates':choices,'catalog_candidate_count':len(candidates),'query':query,'errors':errors[:5],
+                  'candidates':choices,'catalog_candidate_count':sum(bool(c.get('image_url')) for c in choices),'query':query,'errors':errors[:48],
+                  'unavailable_sources':unavailable,
                   'message': 'Поиск остановлен; можно выбрать из загруженных вариантов.' if interrupted else 'Выберите изображение. Текстовые теги при записи обложки сохраняются.' if candidates else 'Поиск не завершён. Повторите попытку.' if errors else 'В доступных источниках обложки по этому запросу не найдены.'}
         if local_choices and not candidates:
             result['message'] += ' Локальные варианты доступны ниже.'
+        if retained and not candidates:
+            result['message'] += ' Сохранённые варианты доступны ниже.'
         result['checked_at']=time.time()
-        result['diagnosis_outcome']='cancelled' if interrupted else ('partial' if candidates else 'error') if errors else 'complete'
+        result['diagnosis_outcome']='cancelled' if interrupted else ('partial' if candidates or retained else 'incomplete' if outage_only else 'error') if errors else 'complete'
+        result['retry_providers'] = retry_providers(result)
         if ready:
             existing = pictures(File(data['path']))
-            matches = []
+            matches = [match for match in state.get('verification', {}).get('matches', [])
+                       if providers is not None and state.get('query') == query
+                       and provider_key(match.get('source')) not in providers]
             if existing:
                 result['current_id']=hashlib.sha256(existing[0]).hexdigest()
                 fingerprint = pixel_digest(existing[0])
@@ -581,12 +718,7 @@ class CoverSession:
             result['verification'] = {'status':'source_match' if matches else 'unverified','matches':matches,
                 'message':'Пиксели текущей картинки совпадают с изображением источника для этой записи. Это не подтверждает выбранное издание.' if matches else 'Совпадение с источниками не установлено. Это не означает, что обложка неправильная.'}
         self.save(data,result)
-        from core.storage import trim_artwork
-        if time.monotonic()-self._last_trim>=30 or self._new_image_bytes>=32*1024*1024:
-            try:
-                trim_artwork(self.root,protect=[c['id'] for c in choices]+[result.get('current_id')])
-                self._last_trim=time.monotonic();self._new_image_bytes=0
-            except OSError:pass
+        self.trim_images([c['id'] for c in choices]+[result.get('current_id')])
         return result
 
     def import_image(self,data,blob,origin='file'):
@@ -625,7 +757,7 @@ class CoverSession:
                               'message':'Обложка публикации добавлена первой. Проверьте её и сохраните выбранный вариант.'})
 
     def upscale(self,data,candidate_id='current',choice_key=None,crop_square=False,crop_position=50):
-        from core.cover_upscale import upscale
+        from core.cover_upscale import PIPELINE_REVISION, upscale
         from core.storage import artwork_choice_key,trim_artwork
         state=self.attach(data)
         before=file_signature(data['path'])
@@ -646,6 +778,7 @@ class CoverSession:
         info=image_info(blob);will_crop=crop_square and info['width']!=info['height']
         if min(info['width'],info['height'])>=1000 and not will_crop:return original
         cached=next((c for c in state.get('candidates',[]) if (c.get('upscale') or {}).get('origin_choice_key')==origin and
+                     c['upscale'].get('pipeline_revision')==PIPELINE_REVISION and
                      bool((c.get('upscale') or {}).get('crop'))==bool(will_crop) and
                      (not will_crop or c['upscale']['crop']['position']==crop_position)),None)
         if cached:return cached

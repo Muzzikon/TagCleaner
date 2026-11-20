@@ -43,25 +43,36 @@ class BatchArtworkDownloads:
 
 class CoverSearchBatch:
     """At most two pending catalog searches; no parallel file/state writes."""
-    def __init__(self,records,indices,query=None,progress=None,cancelled=None):
+    def __init__(self,records,indices,query=None,progress=None,cancelled=None,*,queries=None,downloads=None,provider_filters=None):
         self.records=records;self.indices=list(dict.fromkeys(indices));self.query=query
+        self.queries=queries or {}
+        self.provider_filters=provider_filters or {}
         self.progress=progress or (lambda index,message:None)
-        self.cancelled=cancelled or (lambda:False)
+        self._stopped=threading.Event()
+        self.cancelled=lambda:self._stopped.is_set() or bool(cancelled and cancelled())
         self.pending={};self.cache=OrderedDict();self.position=0;self.pool=None
         self.started=None;self.elapsed=None
-        self.downloads=BatchArtworkDownloads();self.requests=0;self.reuses=0
+        self.downloads=downloads if downloads is not None else BatchArtworkDownloads();self.requests=0;self.reuses=0
 
     def __enter__(self):
         self.started=time.perf_counter()
         self.pool=ThreadPoolExecutor(max_workers=2,thread_name_prefix='cover-prefetch')
-        self._fill();return self
+        try:
+            self._fill()
+        except BaseException:
+            self.__exit__()
+            raise
+        return self
 
     def _fill(self):
         from core.cover_query import default_query
         from core.cover_search import discover
         while len(self.pending)<2 and self.position<len(self.indices) and not self.cancelled():
             index=self.indices[self.position];self.position+=1
-            query=self.query or default_query(self.records[index]);key=tuple(query.get(k,'') for k in ('artist','title','album'))
+            query=self.query or self.queries.get(index) or default_query(self.records[index]);key=tuple(query.get(k,'') for k in ('artist','title','album'))
+            providers = self.provider_filters.get(index)
+            if providers is not None:
+                key = (*key, tuple(providers))
             future=self.cache.get(key)
             if future is not None:
                 self.reuses+=1;self.cache.move_to_end(key)
@@ -70,7 +81,9 @@ class CoverSearchBatch:
                 if not key[0] or not key[1]:
                     future=Future();future.set_exception(ValueError('Укажите исполнителя и название в поиске обложки.'))
                 else:
-                    future=self.pool.submit(discover,*key,progress=lambda message,i=index:self.progress(i,message),cancelled=self.cancelled)
+                    options = {'providers':providers} if providers is not None else {}
+                    future=self.pool.submit(discover,*(query.get(k,'') for k in ('artist','title','album')),
+                        progress=lambda message,i=index:self.progress(i,message),cancelled=self.cancelled, **options)
                 self.cache[key]=future
                 while len(self.cache)>64:self.cache.popitem(last=False)
             self.pending[index]=(key,future)
@@ -89,6 +102,7 @@ class CoverSearchBatch:
         finally:self._fill()
 
     def __exit__(self,*exc):
+        self._stopped.set()
         for _,future in self.pending.values():future.cancel()
         self.pool.shutdown(wait=True,cancel_futures=True)
         self.pending.clear();self.cache.clear()

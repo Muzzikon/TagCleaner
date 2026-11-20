@@ -1,4 +1,5 @@
 import json
+from core.cache_utils import atomic_write_json
 from pathlib import Path
 
 
@@ -58,7 +59,8 @@ def load_preferences():
         data = {}
 
     result = DEFAULT_PREFERENCES.copy()
-    result.update(data)
+    if isinstance(data, dict):
+        result.update(data)
 
     return result
 
@@ -69,16 +71,7 @@ def save_preferences(preferences):
         exist_ok=True,
     )
 
-    with CONFIG_FILE.open(
-        "w",
-        encoding="utf-8",
-    ) as file:
-        json.dump(
-            preferences,
-            file,
-            ensure_ascii=False,
-            indent=2,
-        )
+    atomic_write_json(CONFIG_FILE, preferences)
 
 
 def configure_preferences(

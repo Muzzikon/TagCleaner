@@ -147,6 +147,8 @@ def search_deezer(artist, title, cancelled=lambda: False):
 
 def search_discogs(artist, title, cancelled=lambda: False):
     from core.extra_catalogs import _request, _tracks, _credit, _duration
+    if cancelled():
+        return [], []
     rows, errors = [], []
     try:
         found = _request('discogs', '/database/search',
@@ -159,10 +161,14 @@ def search_discogs(artist, title, cancelled=lambda: False):
             if not release_id.isdigit() or release_id in seen:
                 continue
             seen.add(release_id)
-            release = _request('discogs', '/releases/'+release_id, {}, cache=False)
+            try:
+                release = _request('discogs', '/releases/'+release_id, {}, cache=False)
+            except Exception as error:
+                errors.append('Discogs: '+str(error))
+                continue
             # A secondary image can be the back, a booklet or a label.
             image = next((p for p in release.get('images') or []
-                          if p.get('type') == 'primary' and p.get('uri')), None)
+                          if isinstance(p, dict) and p.get('type') == 'primary' and p.get('uri')), None)
             if not image:
                 continue
             for track in _tracks(release['tracklist']):
