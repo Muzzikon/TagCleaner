@@ -4,6 +4,8 @@ from datetime import datetime
 import shutil
 import hashlib
 import os
+import tempfile
+import time
 
 from core.cache_utils import mark_file_changed, file_signature
 
@@ -261,6 +263,8 @@ def file_sha256(
 def restore_from_backup(
     file_path,
     backup_path,
+    *,
+    original_stat=None,
 ):
     """
     Восстанавливает исходный файл
@@ -289,48 +293,31 @@ def restore_from_backup(
             ),
         }
 
+    temporary = None
     try:
-        original_stat = backup_path.stat()
+        if original_stat is None:
+            try:
+                original_stat = file_path.stat()
+            except FileNotFoundError:
+                original_stat = backup_path.stat()
+        descriptor, name = tempfile.mkstemp(
+            prefix='.tagcleaner-restore-', suffix='.tmp', dir=file_path.parent,
+        )
+        temporary = Path(name)
+        os.close(descriptor)
+        shutil.copy2(backup_path, temporary)
+        if file_sha256(backup_path) != file_sha256(temporary):
+            raise RuntimeError('Контрольная сумма резервной копии не совпала после копирования.')
+        restore_file_times(temporary, original_stat)
         revision_error = None
         try:
             mark_file_changed(file_path)
         except Exception as error:
             # A cache failure must not prevent recovery of the audio bytes.
             revision_error = str(error)
-        shutil.copy2(
-            backup_path,
-            file_path,
-        )
-
-        backup_hash = (
-            file_sha256(
-                backup_path
-            )
-        )
-
-        restored_hash = (
-            file_sha256(
-                file_path
-            )
-        )
-
-        verified = (
-            backup_hash
-            == restored_hash
-        )
-
-        if not verified:
-            return {
-                "success": False,
-                "verified": False,
-                "error": (
-                    "Файл скопирован из backup, "
-                    "но контрольные суммы "
-                    "не совпадают."
-                ),
-            }
-
-        restore_file_times(file_path, original_stat)
+        os.replace(temporary, file_path)
+        if file_path.stat().st_mtime_ns != original_stat.st_mtime_ns:
+            restore_file_times(file_path, original_stat)
 
         return {
             "success": True,
@@ -346,13 +333,32 @@ def restore_from_backup(
             "verified": False,
             "error": str(error),
         }
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def restore_file_times(file_path, original_stat):
     """Preserve integer timestamps, including NTFS's 100 ns precision."""
-    os.utime(file_path, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
-    if Path(file_path).stat().st_mtime_ns != original_stat.st_mtime_ns:
-        raise RuntimeError('Дата изменения файла не восстановлена точно; запись откатывается.')
+    path = Path(file_path)
+    timestamps = original_stat.st_atime_ns, original_stat.st_mtime_ns
+    for delay in (0, 0.025, 0.075, 0.15):
+        if delay:
+            time.sleep(delay)
+        try:
+            os.utime(path, ns=timestamps)
+        except OSError as error:
+            if getattr(error, 'winerror', None) not in (5, 32, 33):
+                raise
+            last_error = error
+        else:
+            if path.stat().st_mtime_ns == original_stat.st_mtime_ns:
+                return
+            last_error = None
+    raise RuntimeError('Дата изменения файла не восстановлена точно; запись откатывается.') from last_error
 
 
 def apply_operations_to_file(
@@ -598,6 +604,7 @@ def apply_operations_to_file(
                 restore_from_backup(
                     file_path,
                     backup_path,
+                    original_stat=original_stat,
                 )
             )
 
@@ -698,6 +705,7 @@ def apply_operations_to_file(
                 restore_from_backup(
                     file_path,
                     backup_path,
+                    original_stat=original_stat,
                 )
             )
 

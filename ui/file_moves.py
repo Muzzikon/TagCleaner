@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from core.cache_utils import file_signature
+from core.tag_writer import restore_file_times
 from ui.editor import current_values
 
 
@@ -60,11 +61,9 @@ def move_one(data, folder, written_store, journal):
         shutil.copystat(source, target)
         if digest(target) != source_hash.digest(): raise ValueError('Контрольная сумма копии не совпала.')
         if file_signature(source) != signature: raise ValueError('Исходник изменился во время копирования.')
-        # Reads can modify atime; restore exact mtime/atime after verification.
-        os.utime(target, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
-        if target.stat().st_mtime_ns != original_stat.st_mtime_ns:
-            raise ValueError('Новая папка не сохраняет дату изменения с исходной точностью. Перенос отменён.')
         with target.open('r+b') as durable: os.fsync(durable.fileno())
+        # Set the file times after the last writable handle has closed.
+        restore_file_times(target, original_stat)
         candidate = copy.deepcopy(data)
         candidate.update(path=str(target.resolve()), file=target.name,
                          analysis_file_signature=file_signature(target), _ui_moved_from=str(source))

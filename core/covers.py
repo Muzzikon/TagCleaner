@@ -873,8 +873,10 @@ class CoverSession:
                 'message':'Эта картинка уже встроена. Выбор подтверждён без перезаписи файла.'})
             return state.get('backup')
         from core.scanner import scan_file
-        from core.tag_writer import create_backup_session, backup_original, restore_from_backup
-        before = scan_file(data['path'], raw_audio=audio)
+        from core.tag_writer import create_backup_session, backup_original, restore_file_times, restore_from_backup
+        path = Path(data['path'])
+        original_stat = path.stat()
+        before = scan_file(path, raw_audio=audio)
         if before['analysis_file_signature'] != state['signature']: raise ValueError('Файл изменился. Повторите поиск.')
         # Mutagen deliberately omits empty standard text frames when saving
         # ID3. Their disappearance loses no value; custom TXXX markers and all
@@ -882,7 +884,9 @@ class CoverSession:
         empty_text_frames={key for key,frame in audio.tags.items()
             if isinstance(frame,TextFrame) and re.fullmatch(r'T[A-Z0-9]{3}',key)
             and key!='TXXX' and before['raw_tags'].get(key)==['']} if isinstance(audio.tags,ID3) else set()
-        backup = backup_original(data['path'], backup_session or create_backup_session(self.root))
+        backup = backup_original(path, backup_session or create_backup_session(self.root))
+        if file_signature(path) != state['signature']:
+            raise ValueError('Файл изменился во время создания резервной копии. Обновите папку.')
         try:
             mark_file_changed(data['path'])
             if audio.tags is None: audio.add_tags()
@@ -917,8 +921,10 @@ class CoverSession:
             if new_tags != old_tags:
                 changed=sorted(k for k in set(old_tags)|set(new_tags) if old_tags.get(k)!=new_tags.get(k))
                 raise ValueError('Дополнительные теги изменились при записи обложки: '+', '.join(changed[:8])+'.')
+            restore_file_times(path, original_stat)
+            fresh['analysis_file_signature'] = file_signature(path)
         except Exception as error:
-            restored = restore_from_backup(data['path'], backup)
+            restored = restore_from_backup(path, backup, original_stat=original_stat)
             if not restored.get('verified'): raise RuntimeError('Не удалось восстановить файл. Резервная копия: ' + str(backup))
             # Rollback changes the revision marker even when all audio bytes
             # match the original. Refresh the snapshot so retry is possible.
