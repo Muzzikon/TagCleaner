@@ -589,7 +589,8 @@ class CoverSession:
                 pass
 
     def search(self, data, query=None, progress=None, cancelled=None,prepared=None,downloads=None, *, retained_choices=(), providers=None):
-        from core.cover_search import discover, match_evidence, default_query, format_cover_warnings, provider_key, retry_providers
+        from core.cover_search import cover_release_priority, discover, match_evidence, default_query, format_cover_warnings, provider_key, retry_providers
+        from core.cover_pages import soundcloud_enabled
         state = self.attach(data)
         query = query or default_query(data)
         if not query.get('artist') or not query.get('title'):
@@ -690,7 +691,8 @@ class CoverSession:
         retained = [choice for choice in state.get('candidates', [])
                     if choice.get('image_url') and (choice['choice_key'] in retained_choices or keep_previous)
                     and choice['choice_key'] not in catalog_keys]
-        choices = [*local_choices, *candidates, *retained[:36-len(candidates)]]
+        catalog_choices = sorted([*candidates, *retained], key=cover_release_priority)[:36]
+        choices = [*local_choices, *catalog_choices]
         errors, unavailable, outage_only = format_cover_warnings(errors)
         result = {**state,'status':'ready' if ready else 'pending' if choices or errors or interrupted else 'not_found',
                   'candidates':choices,'catalog_candidate_count':sum(bool(c.get('image_url')) for c in choices),'query':query,'errors':errors[:48],
@@ -701,6 +703,11 @@ class CoverSession:
         if retained and not candidates:
             result['message'] += ' Сохранённые варианты доступны ниже.'
         result['checked_at']=time.time()
+        if providers is None or 'soundcloud' in providers:
+            result['track_artwork_checked'] = (soundcloud_enabled() and not interrupted
+                                               and not any(provider_key(error) == 'soundcloud' for error in errors))
+        elif state.get('query') != query:
+            result.pop('track_artwork_checked', None)
         result['diagnosis_outcome']='cancelled' if interrupted else ('partial' if candidates or retained else 'incomplete' if outage_only else 'error') if errors else 'complete'
         result['retry_providers'] = retry_providers(result)
         if ready:

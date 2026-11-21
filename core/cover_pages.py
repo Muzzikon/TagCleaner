@@ -5,13 +5,16 @@ import os
 import re
 import threading
 import time
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 
 _lock=threading.RLock()
 _last_request=0.0
+_search_pause_until=0.0
+_search_pause_reason=''
 _SC_HOSTS=('soundcloud.com','www.soundcloud.com','m.soundcloud.com')
 
 
@@ -27,8 +30,11 @@ from core.cover_urls import source_url, _allowed_image_url
 
 
 def _soundcloud_text(url,params=None):
-    global _last_request
+    global _last_request, _search_pause_until, _search_pause_reason
+    searching = url == 'https://soundcloud.com/search/sounds'
     with _lock:
+        if searching and time.monotonic() < _search_pause_until:
+            raise ValueError(_search_pause_reason)
         delay=.35-(time.monotonic()-_last_request)
         if delay>0:time.sleep(delay)
         try:
@@ -47,12 +53,36 @@ def _soundcloud_text(url,params=None):
                         if len(body)>2*1024*1024:raise ValueError('Ответ SoundCloud слишком велик.')
                     return bytes(body).decode('utf-8')
             raise ValueError('Слишком много перенаправлений SoundCloud.')
+        except requests.RequestException as error:
+            response = error.response
+            status = response.status_code if response is not None else None
+            if searching and (status in (403, 429) or (status and 500 <= status < 600)
+                              or isinstance(error, (requests.Timeout, requests.ConnectionError))):
+                retry_after = response.headers.get('Retry-After', '') if response is not None else ''
+                try:
+                    seconds = max(30, int(retry_after))
+                except ValueError:
+                    try:
+                        seconds = max(30, parsedate_to_datetime(retry_after).timestamp() - time.time())
+                    except (TypeError, ValueError, OverflowError):
+                        seconds = 30
+                _search_pause_until = time.monotonic() + seconds
+                _search_pause_reason = f'HTTP {status} при поиске.' if status else 'Не удалось дождаться ответа сервиса.'
+                raise ValueError(_search_pause_reason) from error
+            raise
         finally:_last_request=time.monotonic()
 
 
-def _identity(raw_title):
+def _publication_caption(raw_title, uploader=''):
     value=html.unescape(str(raw_title)).strip()
-    if ' by ' in value:value=value.rsplit(' by ',1)[0].strip()
+    attribution = ' by '+uploader
+    if uploader and value.casefold().endswith(attribution.casefold()):
+        return value[:-len(attribution)].strip()
+    return value
+
+
+def _identity(raw_title):
+    value=_publication_caption(raw_title)
     for separator in (' - ',' – ',' — '):
         if separator in value:
             artist,title=value.split(separator,1)
@@ -92,20 +122,18 @@ def _soundcloud_row(url):
                 break
     if not _soundcloud_artwork(image):
         raise MissingPublicationArtwork('У публикации SoundCloud нет доступной обложки; аватар автора не используется.')
-    artist,title=_identity(payload.get('title') or '')
     uploader=str(payload.get('author_name') or '')
+    caption = _publication_caption(payload.get('title') or '', uploader)
+    artist,title=_identity(caption)
     release = 'Публикация SoundCloud'+(' · '+uploader if uploader else '')
     reason = 'Обложка публикации SoundCloud. Загрузивший её пользователь и конкретное издание не подтверждены; проверьте вручную.'
     if is_set:
-        name = html.unescape(str(payload.get('title') or '')).strip()
-        if ' by ' in name:
-            name = name.rsplit(' by ', 1)[0].strip()
-        release = 'Подборка SoundCloud'+(' · '+name if name else '')
+        release = 'Подборка SoundCloud'+(' · '+caption if caption else '')
         artist, title = '', ''
         reason = 'Обложка подборки SoundCloud. Она может относиться ко всей подборке или первому треку. Проверьте соответствие выбранному треку и версии вручную.'
     return {'image_url':image,'source':'SoundCloud','source_url':url,'release_id':'soundcloud:'+url,
-            'release':release,
-            'artist':artist,'title':title,'duration':None,
+            'release':release,'publication_kind':'set' if is_set else 'track',
+            'artist':artist or (uploader if not is_set else ''),'title':title,'duration':None,
             'review_reason':reason}
 
 
@@ -144,25 +172,39 @@ def search_soundcloud(artist,title,cancelled=lambda:False):
     if not soundcloud_enabled() or cancelled():return [],[]
     from core.recording_credit import roles
     from core.release_credits import remove_primary_features
-    query_title=remove_primary_features(title,roles(artist,title)[1])
-    query=re.sub(r'[^\w\s-]',' ',artist+' '+query_title)
-    query=' '.join(query.split())
+    primary, names = roles(artist, title)
+    query_title = remove_primary_features(title, names)
+    credits = (artist, primary[0]) if primary else (artist,)
+    queries = dict.fromkeys(' '.join(re.sub(r'[^\w\s-]', ' ', credit+' '+query_title).split()) for credit in credits)
     rows,errors=[],[]
+    seen = set()
     try:
-        page=_SearchPage(_soundcloud_text('https://soundcloud.com/search/sounds',{'q':query}))
-        if not page.has_results_markup:raise ValueError('SoundCloud не вернул публичные результаты поиска; можно добавить обложку по ссылке.')
-        seen=set()
-        for url,caption in page.rows:
-            if cancelled() or len(seen)>=3:break
-            credit,song=_identity(caption)
-            if url in seen or not credit or not _publication_match(artist,title,credit,song):continue
-            seen.add(url)
-            try:
-                row=_soundcloud_row(url)
-                # Validate actual publication metadata again, not only search text.
-                if row['artist'] and _publication_match(artist,title,row['artist'],row['title']):rows.append(row)
-            except MissingPublicationArtwork:continue
-            except Exception as error:errors.append('SoundCloud: '+str(error))
+        for query in queries:
+            if cancelled() or rows or len(seen) >= 3:
+                break
+            page = _SearchPage(_soundcloud_text('https://soundcloud.com/search/sounds', {'q':query}))
+            if not page.has_results_markup:
+                raise ValueError('SoundCloud не вернул публичные результаты поиска; можно добавить обложку по ссылке.')
+            for url, caption in page.rows:
+                if cancelled() or len(seen) >= 3:
+                    break
+                credit, song = _identity(caption)
+                if url in seen or not _publication_match(artist, title, credit or artist, song):
+                    continue
+                seen.add(url)
+                try:
+                    row = _soundcloud_row(url)
+                    # Check publication metadata again after selecting a search result.
+                    if row['artist'] and _publication_match(artist, title, row['artist'], row['title']):
+                        rows.append(row)
+                except MissingPublicationArtwork:
+                    continue
+                except requests.HTTPError as error:
+                    if error.response is not None and error.response.status_code in (404, 410):
+                        continue
+                    raise
+                except ValueError as error:
+                    errors.append('SoundCloud: '+str(error))
     except Exception as error:errors.append('SoundCloud: '+str(error))
     return rows,errors
 

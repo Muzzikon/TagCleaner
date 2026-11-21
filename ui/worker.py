@@ -277,9 +277,13 @@ def main():
                 retained_choices = {}
                 saved_queries = {}
                 provider_filters = {}
+                deezer_only = set()
+                deferred = 0
+                deezer_pause = None
                 restored_originals = 0
                 work = list(dict.fromkeys(indices))
                 if retrying:
+                    from core.cover_catalogs import deezer_cooldown
                     from core.cover_search import retry_providers
                     from core.extra_catalogs import retry_access_denied
                     retryable = []
@@ -294,12 +298,16 @@ def main():
                             candidate_count += count
                             continue
                         provider_filters[index] = providers
+                        if providers == ['deezer']:
+                            deezer_only.add(index)
                         saved_queries[index] = previous.get('query')
                         retryable.append(index)
                         sources.update(providers if providers is not None else ('discogs', 'lastfm'))
                     work = retryable
                     retry_access_denied(sources)
                 if refreshing:
+                    from core.cover_search import needs_publication_search
+
                     verified = set()
                     work = []
                     for position, index in enumerate(dict.fromkeys(indices)):
@@ -316,10 +324,14 @@ def main():
                         restored_originals += restored
                         if cancelled():
                             break
-                        if needs_search:
+                        state = data.get('_ui_cover') or {}
+                        add_publication = not needs_search and needs_publication_search(state)
+                        if needs_search or add_publication:
                             work.append(index)
                             retained_choices[index] = keep
-                            saved_queries[index] = (data.get('_ui_cover') or {}).get('query')
+                            saved_queries[index] = state.get('query')
+                            if add_publication:
+                                provider_filters[index] = ['soundcloud']
                         else:
                             prepared_tracks += 1
                             candidate_count += len(data['_ui_cover']['candidates'])
@@ -331,15 +343,22 @@ def main():
                                     updates = []
                     emit('progress', stage='cover_search', file='Проверка сохранённых оригиналов завершена.',
                          details={'done':processed,'total':len(indices)})
+                # Deezer already serializes its API calls. Check its pause before
+                # scheduling each Deezer-only retry so a refusal doesn't fan out.
                 context=CoverSearchBatch(results,work,query,
                     progress=lambda i,message:emit('progress',stage='cover_search',file=results[i].get('file','')+': '+message),
                     cancelled=cancelled,queries=saved_queries,downloads=refresh_downloads,
-                    provider_filters=provider_filters) if searching and (len(work)>1 or refreshing and work) and not cancelled() else nullcontext(None)
+                    provider_filters=provider_filters,on_demand=deezer_only) if searching and (len(work)>1 or refreshing and work) and not cancelled() else nullcontext(None)
                 researched_tracks = 0
                 with context as batch:
                     for index in work:
                         if (searching or action == 'cover_commit') and cancelled():
                             break
+                        if index in deezer_only and (cooldown := deezer_cooldown()):
+                            reason, remaining = cooldown
+                            deezer_pause = {'reason': reason, 'until': time.time() + remaining}
+                            deferred += 1
+                            continue
                         data = results[index]
                         try:
                             if searching:
@@ -431,7 +450,7 @@ def main():
                     'unavailable_sources': dict(unavailable_sources), 'prepared_tracks': prepared_tracks,
                     'candidate_count': candidate_count,
                     'not_found_tracks': not_found_tracks,
-                    'cancelled': processed < len(indices) or cancelled(),
+                    'cancelled': processed + deferred < len(indices) or cancelled(),
                     'performance': batch.stats() if batch is not None else {},
                 }
                 if searching:
@@ -447,6 +466,9 @@ def main():
                         message += f' Сбои источников: {sources}.'
                     if incomplete:
                         message += f' Нужен повторный поиск: {incomplete}.'
+                    if deferred:
+                        summary.update(deferred=deferred, deezer_pause=deezer_pause)
+                        message += f' Отложено до окончания паузы Deezer: {deferred}. {deezer_pause["reason"]}'
                     if failures:
                         message += f' Ошибок: {len(failures)}.' if len(indices) > 1 else ' ' + failures[0]
                 else:

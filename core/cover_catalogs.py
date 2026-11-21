@@ -19,6 +19,13 @@ def deezer_enabled():
     return os.getenv('TAGCLEANER_COVER_DEEZER', '1').lower().strip() in ('1', 'true', 'yes', 'on')
 
 
+def deezer_cooldown():
+    remaining = math.ceil(_deezer_blocked_until - time.monotonic())
+    if remaining > 0:
+        return _deezer_blocked_reason or 'Deezer временно недоступен.', remaining
+    return None
+
+
 def extra_providers():
     from core.extra_catalogs import capability
     return [name for name, state in capability().items() if state['enabled']]
@@ -44,9 +51,10 @@ def related_choice(artist, title, other_artist, other_title):
 def _deezer(endpoint, params=None):
     global _deezer_last
     with _deezer_lock:
-        if time.monotonic() < _deezer_blocked_until:
-            remaining=max(1,math.ceil(_deezer_blocked_until-time.monotonic()))
-            raise RuntimeError(f'{_deezer_blocked_reason or "Deezer временно недоступен"} Повторная попытка через {remaining} с.')
+        cooldown = deezer_cooldown()
+        if cooldown:
+            reason, remaining = cooldown
+            raise RuntimeError(f'{reason} Повторная попытка через {remaining} с.')
         delay = .3 - (time.monotonic() - _deezer_last)
         if delay > 0:
             time.sleep(delay)
@@ -79,8 +87,8 @@ def _deezer(endpoint, params=None):
 
 def _pause_deezer(reason,seconds):
     global _deezer_blocked_until,_deezer_blocked_reason
-    _deezer_blocked_until=time.monotonic()+seconds
     _deezer_blocked_reason=reason
+    _deezer_blocked_until=time.monotonic()+seconds
     raise RuntimeError(f'{reason} Повторная попытка через {seconds} с.') from None
 
 

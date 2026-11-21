@@ -200,7 +200,7 @@ function renderCoverPicker(){
  $('coverSearchErrors').textContent=(c.diagnosis_outcome==='partial'?'Часть источников недоступна. Найденные обложки можно выбрать и сохранить.\n':'')+(c.errors||[]).join('\n');
  $('coverFindBtn').textContent=c.checked_at?'Обновить варианты':'Найти обложки';
  $('coverCandidatesTitle').textContent='Варианты обложек'+(c.candidates?.length?' · '+c.candidates.length:'');
- coverMarkup('coverCandidates',(c.candidates||[]).map(x=>`<button type="button" class="cover-choice ${coverCandidateKey(x)===coverChoice?'chosen':''}" data-cover-action aria-pressed="${coverCandidateKey(x)===coverChoice}" onclick="chooseCover('${coverCandidateKey(x)}')"><img src="${esc(x.preview)}" alt="Обложка ${esc(x.release||'издания')}"><strong>${esc(x.release||'Издание')}</strong><span>${esc(x.artist||'')} · ${esc(x.title||'')}</span><span>${esc(x.source)}${x.date?' · '+esc(x.date):''} · ${x.width} × ${x.height}</span>${x.upscale?`<span>${x.upscale.crop?'Обрезано 1:1 · из':'Увеличено с'} ${x.upscale.original_width} × ${x.upscale.original_height} · ${esc(x.upscale.method)}</span>`:''}${x.needs_review?'<span class="cover-review-note">Проверьте расхождения</span>':''}</button>`).join('')||'<p class="muted">Вариантов пока нет. Нажмите «Найти обложки» или добавьте свой файл.</p>');
+ coverMarkup('coverCandidates',(c.candidates||[]).map(x=>`<button type="button" class="cover-choice ${coverCandidateKey(x)===coverChoice?'chosen':''}" data-cover-action aria-pressed="${coverCandidateKey(x)===coverChoice}" onclick="chooseCover('${coverCandidateKey(x)}')"><img src="${esc(x.preview)}" alt="Обложка ${esc(x.release||'издания')}"><strong>${esc(x.release||'Издание')}</strong><span>${esc(x.artist||'')} · ${esc(x.title||'')}</span><span>${esc(x.source)}${x.publication_kind==='track'?' · обложка трека':x.release_type==='Single'?' · сингл':''}${x.date?' · '+esc(x.date):''} · ${x.width} × ${x.height}</span>${x.upscale?`<span>${x.upscale.crop?'Обрезано 1:1 · из':'Увеличено с'} ${x.upscale.original_width} × ${x.upscale.original_height} · ${esc(x.upscale.method)}</span>`:''}${x.needs_review?'<span class="cover-review-note">Проверьте расхождения</span>':''}</button>`).join('')||'<p class="muted">Вариантов пока нет. Нажмите «Найти обложки» или добавьте свой файл.</p>');
  coverMarkup('coverChosenFacts',choice?`<strong>${esc(choice.release||'Выбранное изображение')}</strong><p>${esc(choice.match_note||'Загружено вами.')}</p>${/^https:\/\//.test(choice.source_url||'')?`<a href="${esc(choice.source_url)}" target="_blank" rel="noopener noreferrer">Источник: ${esc(choice.source||'открыть')}</a>`:''}`:'');
  updateCoverUpscaleControls();
  $('coverChoiceEmpty').hidden=!!imageSource;
@@ -467,7 +467,7 @@ function diagnosisIndices(){let target=$('coverDiagnosisTarget').value;if(target
 function coverPreparationIndices(ids=diagnosisIndices()){
  return $('coverOnlyMissing').checked?ids.filter(i=>{
   const cover=items[i]?.cover||{};
-  return !(cover.candidate_count>0)&&!(cover.checked_at&&cover.diagnosis_outcome==='complete');
+  return !(cover.candidate_count>0)&&!(cover.checked_at&&(cover.diagnosis_outcome==='complete'||cover.retry_providers?.length));
  }):ids;
 }
 function coverRetryIndices(ids=diagnosisIndices()){return ids.filter(i=>{
@@ -483,8 +483,14 @@ function updateCoverActions(){
  $('coverDiagnoseBtn').textContent='Перепроверить · '+count;setDisabled('coverDiagnoseBtn',busy||!count);
  $('coverPrepareBtn').textContent=($('coverOnlyMissing').checked?'Загрузить варианты · ':'Заново найти варианты · ')+prepareCount;setDisabled('coverPrepareBtn',busy||!prepareCount);
  $('coverRefreshBtn').textContent='Обновить варианты · '+count;setDisabled('coverRefreshBtn',busy||!count);
- let retryCount=coverRetryIndices(ids).length;
- $('coverRetryBtn').textContent='Повторить сбои · '+retryCount;setDisabled('coverRetryBtn',busy||!retryCount);
+ const retryIds=coverRetryIndices(ids),retryCount=retryIds.length;
+ const pause=state.cover_summary?.deezer_pause;
+ const deezerPaused=pause&&pause.until*1000>Date.now();
+ const waiting=retryCount>0&&deezerPaused&&retryIds.every(i=>{
+  const providers=items[i].cover.retry_providers;
+  return providers?.length===1&&providers[0]==='deezer';
+ });
+ $('coverRetryBtn').textContent=(waiting?'Пауза Deezer · ':'Повторить сбои · ')+retryCount;setDisabled('coverRetryBtn',busy||!retryCount||waiting);
  $('coverRetryBtn').hidden=!retryCount;
  $('coverBulkStop').hidden=!state.cover_running;
  let r=state.cover_summary, commit=queueScope==='cover_queue'&&state.cover_commit_summary;
@@ -499,6 +505,10 @@ function updateCoverActions(){
   $('coverDiagnosisSummary').textContent+=' · вариантов не найдено: '+r.not_found_tracks;
  const sources=Object.entries(r?.unavailable_sources||{}).map(([source,count])=>source+' ('+count+')');
  if(!state.cover_running&&!commit&&sources.length)$('coverDiagnosisSummary').textContent+=' · сбои источников: '+sources.join(', ');
+ if(!state.cover_running&&!commit&&r?.deferred&&pause){
+  const until=new Date(pause.until*1000).toLocaleTimeString('ru-RU');
+  $('coverDiagnosisSummary').textContent+=' · отложено: '+r.deferred+' · '+pause.reason+(deezerPaused?' Повторите после '+until+'.':' Повтор уже доступен.');
+ }
  const details=state.cover_running||commit?[]:[...(r?.error_details||[]),...(r?.warning_details||[])];
  $('coverDiagnosisErrors').hidden=!details.length;
  $('coverDiagnosisErrorDetails').textContent=details.join('\n');

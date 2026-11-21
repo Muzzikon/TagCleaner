@@ -82,6 +82,25 @@ def match_evidence(data, artist, title, duration):
     return {'needs_review': bool(reasons), 'match_note': ' '.join(reasons) or 'Совпадают исполнитель, название с версией и длительность.'}
 
 
+def cover_release_priority(row):
+    if row.get('release_type') == 'Single' or (
+        row.get('source') == 'Apple Music' and re.search(r'\s[-–—]\sSingle$', row.get('release') or '', re.I)
+    ):
+        return 0
+    if row.get('publication_kind') == 'track':
+        return 1
+    return 2
+
+
+def needs_publication_search(state):
+    from core.cover_pages import soundcloud_enabled
+
+    if not soundcloud_enabled() or state.get('track_artwork_checked') or not state.get('query'):
+        return False
+    choices = [c for c in state.get('candidates', []) if c.get('image_url') and provider_key(c.get('source'))]
+    return bool(choices) and all(cover_release_priority(c) == 2 for c in choices)
+
+
 def _discover(artist, title, album='', progress=None, cancelled=None, provider='all'):
     from core.catalog_search_resolver import search_itunes, search_musicbrainz
     from core.musicbrainz_client import get_official_release_contexts
@@ -121,7 +140,7 @@ def _discover(artist, title, album='', progress=None, cancelled=None, provider='
                         'source':'Cover Art Archive','source_url':'https://musicbrainz.org/release/'+rid,
                         'release':c.get('title'),'release_id':rid,'artist':c.get('track_artist_credit') or recording['artist'],
                         'title':c.get('track_title') or recording['title'],'duration':c.get('duration') or recording.get('duration'),
-                        'date':c.get('date'),'country':c.get('country')})
+                        'date':c.get('date'),'country':c.get('country'),'release_type':c.get('primary_type')})
                     group=str(c.get('release_group_id') or '')
                     if re.fullmatch(r'[0-9a-fA-F-]{36}',group) and 'group:'+group not in seen:
                         seen.add('group:'+group)
@@ -169,15 +188,25 @@ def discover(artist, title, album='', progress=None, cancelled=None, *, provider
                 continue
             results.extend(rows)
             errors.extend(warnings)
-        if selected('soundcloud') and cover_pages.soundcloud_enabled() and not cancelled() and (public_future is not None or not results):
-            if public_future is None:public_future=pool.submit(cover_pages.search_soundcloud,artist,title,cancelled)
+        if selected('soundcloud') and cover_pages.soundcloud_enabled() and not cancelled() and public_future is None:
+            # An EP match does not tell us about separate track artwork.
+            # An unverified CAA URL does not establish that a cover exists.
+            has_single = any(cover_release_priority(row) == 0
+                             and row.get('source') in ('Apple Music', 'Deezer', 'Discogs')
+                             and same_cover_track(artist, title, row.get('artist'), row.get('title'))
+                             for row in results)
+            if not has_single:
+                if progress:
+                    progress('Поиск отдельных обложек SoundCloud')
+                public_future = pool.submit(cover_pages.search_soundcloud, artist, title, cancelled)
+        if public_future is not None and not cancelled():
             try:
                 rows, warnings = public_future.result()
             except Exception as error:
                 errors.append(f'SoundCloud: {error}')
             else:
                 errors.extend(warnings)
-                results = rows + results if publication_version else results + rows
+                results.extend(rows)
         if requested is not None:
             enabled = {'apple', 'musicbrainz', *cover_catalogs.extra_providers()}
             if cover_catalogs.deezer_enabled(): enabled.add('deezer')
@@ -185,5 +214,6 @@ def discover(artist, title, album='', progress=None, cancelled=None, *, provider
             names = {'deezer':'Deezer', 'discogs':'Discogs', 'lastfm':'Last.fm', 'soundcloud':'SoundCloud'}
             errors.extend(names.get(provider, provider)+': источник отключён или ключ не настроен.'
                           for provider in sorted(requested-enabled))
-    if album.strip():results.sort(key=lambda row:album.casefold() not in (row.get('release') or '').casefold())
+    album_hint = album.strip().casefold()
+    results.sort(key=lambda row: (cover_release_priority(row), album_hint not in (row.get('release') or '').casefold()))
     return results,errors
