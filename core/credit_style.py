@@ -36,10 +36,10 @@ def editor_credit_values(artist,title,filename=''):
     from core.uniformity import title_style,artist_credit_key,name_key,clean
     from core.naming import canonical_track_title
     artist=clean(artist)
-    formatted,_=title_style(clean(title),artist)
+    from core.title_identity import CAPTION, strip_download_label
+    formatted,_=title_style(strip_download_label(clean(title)),artist)
     # A source caption is sometimes retained after the bare feat. is formatted.
     # Keep meaningful Live/Remix/Edit/etc. suffixes, even when absent in filename.
-    from core.title_identity import CAPTION
     candidate=CAPTION.sub('',formatted).strip()
     if candidate and candidate!=formatted and filename:
         stem=re.sub(r'\.[^.\\/]+$','',re.split(r'[\\/]',filename)[-1])

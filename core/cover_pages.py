@@ -31,7 +31,7 @@ from core.cover_urls import source_url, _allowed_image_url
 
 def _soundcloud_text(url,params=None):
     global _last_request, _search_pause_until, _search_pause_reason
-    searching = url == 'https://soundcloud.com/search/sounds'
+    searching = url in ('https://soundcloud.com/search/sounds','https://soundcloud.com/search/sets')
     with _lock:
         if searching and time.monotonic() < _search_pause_until:
             raise ValueError(_search_pause_reason)
@@ -138,15 +138,16 @@ def _soundcloud_row(url):
 
 
 class _SearchPage(HTMLParser):
-    def __init__(self,text):
-        super().__init__();self.in_noscript=False;self.has_results_markup=False;self.link=None;self.parts=[];self.rows=[];self.feed(text)
+    def __init__(self,text,*,sets=False):
+        super().__init__();self.in_noscript=False;self.has_results_markup=False;self.link=None;self.parts=[];self.rows=[];self.sets=sets;self.feed(text)
 
     def handle_starttag(self,tag,attrs):
         if tag=='noscript':self.in_noscript=True;self.has_results_markup=True
         if tag=='a' and self.in_noscript:
             try:
                 self.link=source_url(urljoin('https://soundcloud.com',dict(attrs).get('href','')))
-                if urlparse(self.link).hostname!='soundcloud.com' or '/sets/' in urlparse(self.link).path:self.link=None
+                parsed=urlparse(self.link)
+                if parsed.hostname!='soundcloud.com' or ('/sets/' in parsed.path)!=self.sets:self.link=None
             except ValueError:self.link=None
             self.parts=[]
 

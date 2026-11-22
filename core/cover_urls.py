@@ -43,3 +43,10 @@ def source_url(value):
         return bandcamp_source_url(value)
     except (ValueError,TypeError,AttributeError):
         raise ValueError('Нужна HTTPS-ссылка на трек или подборку SoundCloud либо страницу трека/альбома Bandcamp.') from None
+
+
+def edition_source_url(value):
+    url=source_url(value)
+    if urlparse(url).hostname=='soundcloud.com' and '/sets/' not in urlparse(url).path:
+        raise ValueError('Для издания нужна ссылка на альбом или EP в SoundCloud, либо на трек или альбом Bandcamp.')
+    return url

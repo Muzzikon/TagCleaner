@@ -21,8 +21,8 @@ sys.path.insert(0, str(ROOT))
 PYTHON = str(ROOT / '.venv-audio' / 'Scripts' / 'python.exe') if getattr(sys, 'frozen', False) else sys.executable
 os.chdir(ROOT)
 TOKEN = secrets.token_urlsafe(32)
-UI_API_VERSION = 56
-UI_BUILD = '2026.11.18-selected-tag-check'
+UI_API_VERSION = 60
+UI_BUILD = '2026.11.22-cross-catalog-editions'
 STATE = {'phase':'idle', 'message':'Выберите папку с музыкой', 'done':0, 'total':0,
          'files':[], 'results':[], 'roots':[], 'undo_delete':'', 'prompt':None, 'operations':[], 'log':[],
          'ui_api_version':UI_API_VERSION, 'ui_build':UI_BUILD}
@@ -175,6 +175,18 @@ def send(data):
     if PROCESS is None or PROCESS.poll() is not None: raise ValueError('Процесс проверки недоступен')
     PROCESS.stdin.write(json.dumps(data, ensure_ascii=True)+'\n'); PROCESS.stdin.flush()
 
+def sync_release_searches():
+    # The worker's interactive review also consumes stdin. Send internal
+    # commands only while it is accepting ordinary commands.
+    if STATE['phase'] != 'ready':return
+    for job in STATE.get('release_search_jobs',{}).values():
+        if job['status'] != 'waiting':continue
+        try:
+            send({'action':'release_search_sync','request_id':job['id']})
+            job['status']='syncing'
+        except (OSError,ValueError) as error:
+            job.update(status='done',error=str(error))
+
 def observe(process, preserve_visible=False):
     failure = None
     streamed=[]
@@ -247,10 +259,20 @@ def observe(process, preserve_visible=False):
                     message = f"Проверено тегов треков: {e['count']} · с замечаниями: {e['flagged']} · не прочитано: {e['errors']}."
                     STATE.update(phase='ready', message=message, action_error=None, tag_check_summary=summary,
                                  done=e['count'], total=e['count'])
-                elif kind=='releases_found':
-                    STATE['results'][e['index']]=e['item']
-                    STATE['results_revision']=STATE.get('results_revision',0)+1
-                    STATE.update(phase='ready',action_error=None,message='Поиск изданий завершён.',release_search_warnings=e.get('warnings',[]))
+                elif kind in ('release_search_ready','releases_found'):
+                    job=STATE.get('release_search_jobs',{}).get(e['path'])
+                    if job and job['id']==e['request_id']:
+                        if kind=='release_search_ready':
+                            job['status']='waiting'
+                        else:
+                            index=e.get('index')
+                            error=e.get('error')
+                            if not error:
+                                if index is not None and 0<=index<len(STATE['results']) and STATE['results'][index]['path']==e['path']:
+                                    STATE['results'][index]['_ui_extra_releases']=e['contexts']
+                                else:
+                                    error='Трек изменился во время поиска. Выполните поиск заново.'
+                            job.update(status='done',warnings=e.get('warnings',[]),error=error)
                 elif kind in ('cover_updated', 'cover_updates', 'cover_queue_updates'):
                     updates = [e] if kind == 'cover_updated' else e['updates']
                     for update in updates:
@@ -312,7 +334,7 @@ def observe(process, preserve_visible=False):
                 elif kind=='export': STATE['export']=e['path']
                 elif kind in ('error','stopped'): STATE.update(phase=kind, message=e.get('message',''), prompt=None,local_operation=None,refresh_requested=False)
                 # Keep compact events; raw evidence lives in the TXT/JSON report.
-                if kind not in ('results','results_chunk','results_complete','edited','written','cover_updated','cover_updates','cover_queue_updates','progress','collection_synced','audit_report') or e.get('stage') in ('shazam_transport','fingerprint_failed'):
+                if kind not in ('results','results_chunk','results_complete','edited','written','cover_updated','cover_updates','cover_queue_updates','progress','collection_synced','audit_report','release_search_ready','releases_found') or e.get('stage') in ('shazam_transport','fingerprint_failed'):
                     event={k:v for k,v in e.items() if k not in ('written_paths','marked_paths')} if kind=='cover_done' else e
                     STATE['log']=(STATE['log']+[event])[-40:]
     except Exception as error:
@@ -377,6 +399,8 @@ def detach_worker():
     global PROCESS
     with LOCK:
         old=PROCESS;PROCESS=None
+        for job in STATE.get('release_search_jobs',{}).values():
+            if job['status']!='done':job.update(status='done',error='Поиск прерван при обновлении списка.')
     if old is not None and old.poll() is None:
         old.stdin.close()
         old.wait(timeout=10)
@@ -745,7 +769,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get('X-Token')!=TOKEN: self.respond({'error':'Нет доступа'},403);return
         if self.path=='/state':
             with LOCK:
+                sync_release_searches()
                 data={k:v for k,v in STATE.items() if k not in ('results','files','audit_report')}
+                data['release_search_jobs']={path:dict(job) for path,job in STATE.get('release_search_jobs',{}).items()}
                 if not STATE.get('trash_checked'):
                     from core.library_sync import TrashStore
                     STATE['undo_delete']=TrashStore(ROOT).latest() or '';STATE['trash_checked']=True
@@ -880,7 +906,12 @@ class Handler(BaseHTTPRequestHandler):
                         options=release_options(item)
                         if type(release_index)!=int or not 0<=release_index<len(options):raise ValueError('Издание недоступно; откройте редактор заново.')
                         context=options[release_index]
-                    self.respond(editor_diagnostics(item,data.get('values'),context,audit_rules,data.get('field'),data.get('use_local_identity',False),apply_release=self.path=='/editor_release',use_filename_identity=data.get('use_filename_identity',False)));return
+                    self.respond(editor_diagnostics(
+                        item,data.get('values'),context,audit_rules,data.get('field'),data.get('use_local_identity',False),
+                        apply_release=self.path=='/editor_release',use_filename_identity=data.get('use_filename_identity',False),
+                        copy_release_fields=data.get('copy_release_fields',False),
+                        copy_release_track=data.get('copy_release_track',False)))
+                    return
                 self.respond(diagnostic_proposal(item,data.get('field'),data.get('values')));return
             if self.path == '/albumartist_style':
                 import copy
@@ -1059,10 +1090,21 @@ class Handler(BaseHTTPRequestHandler):
                     source=data.get('source_url','')
                     if not isinstance(source,str) or len(source)>4096:raise ValueError('Некорректная ссылка на источник.')
                     if source:
-                        from core.cover_urls import bandcamp_source_url as source_url
+                        from core.cover_urls import edition_source_url as source_url
                         source_url(source)
-                    STATE.update(phase='review',action_error=None,message='Ищем синглы, альбомы и сборники…',release_search_warnings=[])
-                    send({**data,'action':action})
+                    jobs=STATE.setdefault('release_search_jobs',{})
+                    path=data['path']; existing=jobs.get(path)
+                    if existing and existing['status']!='done':
+                        self.respond({'ok':True,'request_id':existing['id']});return
+                    if sum(job['status']!='done' for job in jobs.values())>=2:
+                        raise ValueError('Уже ищем издания для двух треков. Дождитесь одного из результатов.')
+                    request_id=uuid.uuid4().hex
+                    send({**data,'action':action,'request_id':request_id})
+                    jobs[path]={'id':request_id,'status':'searching'}
+                    if len(jobs)>32:
+                        oldest=next(key for key,job in jobs.items() if job['status']=='done')
+                        jobs.pop(oldest)
+                    self.respond({'ok':True,'request_id':request_id});return
                 elif action in ('edit','edit_preview','reset_edit'):
                     if phase!='ready':raise ValueError('Редактор доступен после окончания проверки и перед записью')
                     if 'revision' in data and data['revision']!=STATE.get('results_revision',0):raise ValueError('Список изменился; откройте редактор заново.')

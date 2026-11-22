@@ -301,14 +301,16 @@ def _format_mb_artist(recording):
     )
 
 
-@cached_singleflight(lambda artist, title, refresh=False: (artist or "", title or "", refresh))
-def search_musicbrainz(artist, title, refresh=False):
+@cached_singleflight(lambda artist, title, refresh=False, *, release_title='': (artist or "", title or "", refresh, release_title))
+def search_musicbrainz(artist, title, refresh=False, *, release_title=''):
     if not title:
         return []
 
     query_parts = [f"recording:{_lucene_quote(title)}"]
     if artist:
         query_parts.append(f"artist:{_lucene_quote(artist)}")
+    if release_title:
+        query_parts.append(f"release:{_lucene_quote(release_title)}")
 
     query = " AND ".join(query_parts)
     cache_key = query

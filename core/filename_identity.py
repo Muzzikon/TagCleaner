@@ -14,6 +14,8 @@ def proposal(filename,remixer='',*,reference_title=''):
     basename=re.split(r'[\\/]',str(filename or ''))[-1]
     stem=re.sub(r'\.(?:mp3|flac|m4a|mp4|ogg|opus|wav|aiff|aif)$','',basename,flags=re.I)
     parts=re.split(r'\s+[-–—]\s+',stem,maxsplit=1)
+    if len(parts)==1 and '_-_' in stem:
+        parts=[part.replace('_',' ') for part in stem.split('_-_',1)]
     if len(parts)!=2 or not all(p.strip() for p in parts):return None
     if len(stem)>4096 or any(ord(c)<32 for c in stem):return None
     artist,title=parts

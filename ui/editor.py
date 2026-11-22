@@ -11,6 +11,7 @@ from core.duration_policy import duration_requires_review
 
 FIELDS = tuple(WRITABLE_FIELDS)
 RELEASE_FIELDS = ('album', 'albumartist', 'date', 'tracknumber', 'discnumber')
+TRACK_FIELDS = ('artist', 'title', 'remixer')
 
 def compatible_values(values, reference):
     """Extend pre-remixer records without clearing an existing file credit."""
@@ -99,7 +100,7 @@ def draft_matches_current(data, current=None):
             and draft.get('values') == current_values(reference))
 
 def release_options(data):
-    sources = list(data.get('release_contexts') or []) + list(data.get('_ui_extra_releases') or [])
+    sources = list(data.get('release_contexts') or [])
     selection = data.get('release_context_selection') or {}
     sources += list(selection.get('options') or []) + list(selection.get('equivalent_releases') or [])
     for context in (selection.get('selected'), data.get('selected_release_context')):
@@ -109,6 +110,8 @@ def release_options(data):
     draft_values=(data.get('_ui_draft') or {}).get('values') or {}
     if isinstance(draft_values,dict) and (draft_values.get('artist'),draft_values.get('title'))!=(data.get('artist'),data.get('title')):
         sources.extend(find(draft_values.get('artist') or '',draft_values.get('title') or ''))
+    # Searches append choices while an editor may be using an existing index.
+    sources.extend(data.get('_ui_extra_releases') or [])
     result, seen = [], set()
     for context in sources:
         if not isinstance(context, dict): continue
@@ -132,6 +135,43 @@ def release_values(data, context):
             'discnumber':number(context.get('disc_number'),context.get('disc_total'))}
 
 
+def copyable_release_values(values, writable):
+    from core.uniformity import iso_date, number_style
+
+    formatters = {'date': iso_date, 'tracknumber': number_style, 'discnumber': number_style}
+    result = {}
+    for field in RELEASE_FIELDS:
+        value = values[field].strip()
+        if not value or not writable[field] or len(value) > 4096 or any(ord(c) < 32 for c in value):
+            continue
+        try:
+            value.encode('utf-8')
+            if field in formatters:
+                value = formatters[field](value)
+        except ValueError:
+            continue
+        result[field] = value
+    return result
+
+
+def copyable_release_track(data, context, album, writable):
+    from core.editor_identity import format_identity
+    from core.naming import canonical_artist_credit_from_items
+
+    artist = canonical_artist_credit_from_items(context.get('track_artist_credit_items')) or context.get('track_artist_credit')
+    title = context.get('track_title')
+    if not artist or not title or not all(writable[name] for name in TRACK_FIELDS):
+        return {}
+    # An explicit copy uses this edition's credit, independent of the saved
+    # caption and other catalog candidates for the file.
+    source = {'_ui_editor_release':context, 'album':album,
+              '_artist_name_preference':data.get('_artist_name_preference')}
+    values = format_identity(source,artist,title)['values']
+    if any(len(v)>4096 or any(ord(c)<32 for c in v) for v in values.values()):
+        return {}
+    return values
+
+
 def release_choice_reason(data,context,values,*,allow_duration_mismatch=False):
     from core.release_credits import matches, recognized_credit, matches_recognized_credit
     artist, title = values.get('artist') or '', values.get('title') or ''
@@ -143,8 +183,8 @@ def release_choice_reason(data,context,values,*,allow_duration_mismatch=False):
             file_candidate=filename_proposal(data.get('file') or data['path'],values.get('remixer') or '',reference_title=values.get('title') or '')
             if not file_candidate or not can_use_for_release(data,values) or not matches(context,file_candidate['values']['artist'],file_candidate['values']['title']):
                 if not str(values.get('artist') or '').strip() or not str(values.get('title') or '').strip():
-                    return 'Используйте «Заполнить из имени файла» или заполните исполнителя и название вручную. Соответствие этого издания треку пока не подтверждено.'
-                return 'Другая запись или состав исполнителей. Совпадения названия и одного участника недостаточно; поля издания не применены.'
+                    return 'Кредит трека есть в карточке. Для сверки с тегами заполните исполнителя и название.'
+                return 'Другая запись или состав исполнителей возможны. Сверьте название, версию и участников с каталогом.'
     if not allow_duration_mismatch and duration_requires_review(data.get('duration'),context.get('duration')):
         return 'Длительность расходится больше чем на 5 секунд. Проверьте аудио и версию; поля издания не применены.'
     return ''
@@ -162,12 +202,11 @@ def release_duration_warning(data,context):
 
 
 def release_check(data,context,values,index):
-    # Duration is review evidence, not a veto on an explicit manual edition.
-    # Song/version/whole-credit mismatches still cannot supply release facts.
+    # Identity matching gates linking the edition. Manual copying is separate.
     reason=release_choice_reason(data,context,values,allow_duration_mismatch=True)
-    warning=release_duration_warning(data,context) if not reason else ''
+    warning=release_duration_warning(data,context)
     return {'index':index,'selectable':not bool(reason),'reason':reason,
-            'requires_duration_review':bool(warning),'warning':warning}
+            'requires_duration_review':not reason and bool(warning),'warning':warning}
 
 
 def release_checks(data,values):
@@ -181,25 +220,46 @@ def editor_info(data):
     from core.verified_releases import warnings
     from core.audit_approval import apply as apply_approval
     from core.filename_identity import proposal as filename_proposal
+    from core.release_discovery import same_track
+    from core.uniformity import multi_fields
     accepted=apply_approval(data,{'issues':(data.get('_ui_audit') or {}).get('acknowledged') or [],'fixes':{},'proposals':{}})
     accepted_reasons={i['reason'] for i in accepted.get('acknowledged',[])}
     options = []
-    entered=(data.get('_ui_draft') or {}).get('values') or current_values(data)
+    writable = {name:is_field_writable_for_path(data['path'],name) for name in FIELDS}
+    multiple = multi_fields(data)
+    copyable = {name:supported and name not in multiple for name,supported in writable.items()}
+    current = current_values(data)
+    entered=(data.get('_ui_draft') or {}).get('values') or current
     for i, context in enumerate(release_options(data)):
-        options.append({'context':context, 'values':release_values(data, context),
+        values = release_values(data, context)
+        options.append({'context':context, 'values':values, 'copy_values':copyable_release_values(values,copyable),
+                        'copy_track':copyable_release_track(data,context,values['album'],copyable),
                         **release_check(data,context,entered,i)})
-    return {'current':current_values(data), 'writable':{n:is_field_writable_for_path(data['path'],n) for n in FIELDS},
+    identity = identity_proposal(data)
+    plan = data.get('change_plan') or {}
+    recognition = identity['values']
+    if plan.get('identity') in ('SAFE','REVIEW') and all(recognition.get(n) for n in ('artist','title')):
+        credits = {tuple(track.items()):track for option in options if (track:=option['copy_track'])
+                   and not duration_requires_review(data.get('duration'),option['context'].get('duration'))
+                   and same_track(recognition['artist'],recognition['title'],track['artist'],track['title'])}
+        if len(credits)==1:
+            recognition = next(iter(credits.values()))
+    if (plan.get('identity') not in ('SAFE','REVIEW') or not all(recognition.get(n) for n in ('artist','title'))
+            or not any((plan.get(n) or {}).get('proposed') not in (None,current[n]) for n in ('artist','title'))
+            or any(recognition[n]!=current[n] and not copyable[n] for n in TRACK_FIELDS)):
+        recognition = None
+    return {'current':current, 'writable':writable,
             'releases':options, 'draft':data.get('_ui_draft'), 'draft_warning':data.get('_ui_draft_warning'),
             'selected_release':data.get('_ui_manual_release'),
             'draft_matches_current':draft_matches_current(data),
             'version_authors':version_author_options(data.get('title')),
             'edition_warnings':[reason for reason in warnings(data) if reason not in accepted_reasons],
-            'identity_proposal':identity_proposal(data),
+            'identity_proposal':identity, 'recognition_candidate':recognition,
             'filename_identity_proposal':filename_proposal(data.get('file') or data['path'],entered.get('remixer') or data.get('remixer') or '',reference_title=entered.get('title') or ''),
             'albumartist_proposal':proposal(data,(data.get('change_plan',{}).get('albumartist') or {}).get('proposed') or data.get('albumartist') or ''),
             'suggested_filename':suggested_filename(data)}
 
-def editor_diagnostics(data, entered, context=None, rules=None, field=None, use_local_identity=False, apply_release=False, use_filename_identity=False):
+def editor_diagnostics(data, entered, context=None, rules=None, field=None, use_local_identity=False, apply_release=False, use_filename_identity=False, *, copy_release_fields=False, copy_release_track=False):
     """Recompute read-only suggestions for the current, unsaved editor state."""
     from core.uniformity import audit_records
     from core.release_titles import same_album
@@ -213,13 +273,34 @@ def editor_diagnostics(data, entered, context=None, rules=None, field=None, use_
     if field is not None and field not in FIELDS:raise ValueError('Неизвестное поле редактора.')
     if type(use_local_identity) is not bool:raise ValueError('Некорректный выбор локальной подсказки.')
     if type(use_filename_identity) is not bool:raise ValueError('Некорректный выбор имени файла.')
+    if type(copy_release_fields) is not bool or type(copy_release_track) is not bool:
+        raise ValueError('Некорректный выбор действия с изданием.')
+    if copy_release_track and not copy_release_fields:raise ValueError('Сначала выберите издание для переноса.')
+    if copy_release_fields and (not apply_release or use_local_identity or field is not None):
+        raise ValueError('Выберите одно действие редактора.')
     if use_filename_identity and (use_local_identity or apply_release or field is not None):
         raise ValueError('Выберите одно действие редактора.')
-    from core.filename_identity import proposal as filename_proposal,can_use_for_release
-    filename=filename_proposal(data.get('file') or data['path'],entered['remixer'],reference_title=entered['title'])
     signature=data.get('analysis_file_signature')
     if not signature or file_signature(data['path'])!=signature:
         raise ValueError('Файл изменился. Обновите локальные теги и откройте редактор заново.')
+    if copy_release_fields:
+        if context is None:
+            raise ValueError('Выберите конкретное издание.')
+        from core.uniformity import multi_fields
+        multiple = multi_fields(data)
+        writable = {name:name not in multiple and is_field_writable_for_path(data['path'],name) for name in FIELDS}
+        facts = release_values(data,context)
+        values = copyable_release_values(facts,writable)
+        if not values:
+            raise ValueError('В издании нет данных, которые можно перенести в теги этого файла.')
+        if copy_release_track:
+            track = copyable_release_track(data,context,facts['album'],writable)
+            if not track:
+                raise ValueError('Для этого издания недоступен полный кредит трека.')
+            values.update(track)
+        return {'values':values}
+    from core.filename_identity import proposal as filename_proposal,can_use_for_release
+    filename=filename_proposal(data.get('file') or data['path'],entered['remixer'],reference_title=entered['title'])
     original=dict(entered)
     if apply_release:
         if context is None:raise ValueError('Выберите конкретное издание.')
@@ -624,6 +705,8 @@ def mark_completed(data, drafts, written_store, confirmed_release=None):
     fresh = scan_file(data['path'])
     if not data.get('analysis_file_signature') or fresh['analysis_file_signature'] != data['analysis_file_signature']:
         raise ValueError('Файл изменился после анализа. Перепроверьте этот трек.')
+    if not all(str(fresh.get(name) or '').strip() for name in ('artist','title')):
+        raise ValueError('Заполните исполнителя и название трека перед подтверждением.')
     if confirmed_release:
         validate_release_choice(fresh,current_values(fresh),confirmed_release,allow_duration_mismatch=True)
     if data.get('_ui_draft') and not draft_matches_current(data, fresh):

@@ -11,7 +11,8 @@ from core.uniformity import artist_credit_key,clean
 
 def title_key(value):
     from core.uniformity import title_style
-    text=canonical_track_title(title_style(value)[0])
+    from core.title_identity import strip_download_label
+    text=canonical_track_title(title_style(strip_download_label(value))[0])
     # A generic trailing VIP has no author named after the song. Catalogs
     # legitimately alternate "Song VIP" and "Song (VIP)".
     text=re.sub(r'\s+VIP\s*$',' (VIP)',text,flags=re.I)

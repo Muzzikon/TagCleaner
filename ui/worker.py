@@ -82,7 +82,7 @@ builtins.input = ask
 
 def main():
     global library_cache
-    emit('started', pid=os.getpid(), ui_api_version=56)
+    emit('started', pid=os.getpid(), ui_api_version=60)
     request = json.loads(sys.stdin.readline())
     from core.library_cache import LibraryCache
     library_cache = LibraryCache(ROOT/'ui_runtime/library.sqlite3')
@@ -236,6 +236,21 @@ def main():
     from core.file_renamer import preview_renames, execute_rename, refresh_after_rename
     pending = None
     pending_kind = 'tags'
+    searches = {}
+    search_lock = threading.Lock()
+
+    def find_releases(command, snapshot):
+        request_id = command['request_id']
+        try:
+            from core.release_discovery import discover
+            contexts,warnings=discover(snapshot,command['artist'],command['title'],command.get('album_query',''),command.get('source_url',''))
+            error=None
+        except Exception as failure:
+            contexts,warnings,error=[],[],str(failure)
+        with search_lock:
+            searches[request_id]=(snapshot['path'],snapshot.get('analysis_file_signature'),contexts,warnings,error)
+        emit('release_search_ready',path=snapshot['path'],request_id=request_id)
+
     for line in sys.stdin:
         command = json.loads(line)
         try:
@@ -478,12 +493,27 @@ def main():
                 emit('cover_done', operation=action, written_paths=written_paths, marked_paths=marked_paths,
                      upscaled_choices=upscaled_choices, imported_choices=imported_choices, summary=summary, message=message)
             elif action == 'release_search':
-                index=command['index'];data=results[index]
-                from core.release_discovery import discover
-                contexts,warnings=discover(data,command['artist'],command['title'],command.get('album_query',''),command.get('source_url',''),
-                    progress=lambda message:emit('progress',stage='release_search',file=message))
-                data['_ui_extra_releases']=contexts
-                emit('releases_found',index=index,item=data,warnings=warnings)
+                index=command['index']
+                threading.Thread(target=find_releases,args=(command,copy.deepcopy(results[index])),daemon=True).start()
+            elif action == 'release_search_sync':
+                request_id=command['request_id']
+                with search_lock:
+                    path,signature,contexts,warnings,error=searches.pop(request_id)
+                index=next((i for i,item in enumerate(results) if item['path']==path and item.get('analysis_file_signature')==signature),None)
+                if index is None:
+                    error='Трек изменился во время поиска. Выполните поиск заново.'
+                elif not error:
+                    data=results[index]
+                    from ui.editor import release_options
+                    known=release_options(data)
+                    added=[context for context in contexts if context not in known]
+                    contexts=[*(data.get('_ui_extra_releases') or []),*added]
+                    data['_ui_extra_releases']=contexts
+                    if added:
+                        try:library_cache.save([data])
+                        except Exception as failure:
+                            warnings.append('Издания открыты, но сохранить их в локальном кеше не удалось: '+str(failure))
+                emit('releases_found',path=path,request_id=request_id,index=index,contexts=contexts,warnings=warnings,error=error)
             elif action == 'tag_recheck':
                 from ui.editor import check_saved_tags
                 indices = command.get('indices', [])

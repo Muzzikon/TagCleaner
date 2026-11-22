@@ -3,9 +3,14 @@ import re
 
 # Exact, bracketed labels only. Never strip a Remix, VIP, Live or other version.
 CAPTION = re.compile(r'\s*[\[(](?:(?:official\s+)?(?:music\s+video|video|audio|lyric\s+video)|melodic\s+dubstep)[\])]\s*$',re.I)
+_DOWNLOAD_HOST = r'(?:www\.)?(?:lightaudio\.ru|mp3track\.online|mp3teka\.com)'
+DOWNLOAD_LABEL = re.compile(rf'(?:(?<!\S)|_)(?:\(\s*{_DOWNLOAD_HOST}\s*\)|\[\s*{_DOWNLOAD_HOST}\s*\])(?=\s|$)', re.I)
+
+def strip_download_label(title):
+    return ' '.join(DOWNLOAD_LABEL.sub('', str(title or '')).split())
 
 def comparison_title(artist,title):
     from core.uniformity import title_style
     from core.naming import canonical_track_title
-    title,_=title_style(str(title or ''),artist)
+    title,_=title_style(strip_download_label(title),artist)
     return canonical_track_title(CAPTION.sub('',title).strip())

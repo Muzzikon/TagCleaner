@@ -603,6 +603,10 @@ class CoverSession:
         else:
             options = {'providers': providers} if providers is not None else {}
             rows, errors = discover(query['artist'],query['title'],query.get('album',''),progress,cancelled, **options)
+        has_release_art = data.get('_ui_extra_releases') or (data.get('selected_release_context') or {}).get('source') == 'soundcloud'
+        if has_release_art and (providers is None or 'soundcloud' in providers) and soundcloud_enabled():
+            from core.soundcloud_releases import artwork_candidates
+            rows = [*artwork_candidates(data,query['artist'],query['title']),*rows]
         if providers is not None and state.get('query') == query:
             errors = [*(warning for warning in state.get('errors', []) if provider_key(warning) not in providers), *errors]
         candidates, seen, ordered = [], set(), []
