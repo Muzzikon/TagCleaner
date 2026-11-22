@@ -1,0 +1,14 @@
+TagCleaner Android
+SPDX-License-Identifier: GPL-2.0-or-later
+
+The TagCleaner Android source code is licensed under the GNU General Public
+License, version 2 or (at your option) any later version. The same license
+applies to the shared modules packaged in the Android app:
+
+  core/cover_tags.py
+  core/extra_tags.py
+  core/local_cleanup.py
+  core/tag_access.py
+
+See licenses/GPL-2.0.txt for the full license text and ../THIRD-PARTY.md for
+the terms of bundled third-party components.

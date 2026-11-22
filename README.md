@@ -1,14 +1,15 @@
 # TagCleaner
 
-TagCleaner помогает привести в порядок музыкальную библиотеку на Windows. Можно править теги, подбирать обложки из каталогов и вшивать выбранные изображения в несколько треков за один раз.
+TagCleaner помогает привести в порядок музыкальную библиотеку. Можно править теги, подбирать обложки из каталогов и вшивать выбранные изображения в несколько треков за один раз.
 
 [![Скачать TagCleaner для Windows](https://img.shields.io/badge/Скачать-TagCleaner%20для%20Windows%20x64-ef965e?style=for-the-badge)](https://github.com/Muzzikon/TagCleaner/releases/latest/download/TagCleaner-Windows-x64.zip)
+[![Скачать TagCleaner для Android](https://img.shields.io/badge/Скачать-TagCleaner%20для%20Android-3ddc84?style=for-the-badge)](https://github.com/Muzzikon/TagCleaner/releases/download/android-v1.0.0/TagCleaner-Android-1.0.0.apk)
 
-**[Скачать ZIP для Windows x64](https://github.com/Muzzikon/TagCleaner/releases/latest/download/TagCleaner-Windows-x64.zip)** · [Все версии и контрольные суммы](https://github.com/Muzzikon/TagCleaner/releases) · [Сообщить о проблеме](https://github.com/Muzzikon/TagCleaner/issues/new)
+**[ZIP для Windows x64](https://github.com/Muzzikon/TagCleaner/releases/latest/download/TagCleaner-Windows-x64.zip)** · **[APK для Android](https://github.com/Muzzikon/TagCleaner/releases/download/android-v1.0.0/TagCleaner-Android-1.0.0.apk)** · [Все релизы](https://github.com/Muzzikon/TagCleaner/releases) · [Сообщить о проблеме](https://github.com/Muzzikon/TagCleaner/issues/new)
 
-[Руководство по кнопкам и разделам](docs/guide.md) · [Как работает TagCleaner](docs/architecture.md)
+[Руководство для Windows](docs/guide.md) · [Руководство для Android](android/README.md) · [Как работает TagCleaner](docs/architecture.md)
 
-## Первый запуск
+## Первый запуск на Windows
 
 1. Скачайте `TagCleaner-Windows-x64.zip` и распакуйте всю папку туда, где у вас есть права на запись, например в «Документы».
 2. Запустите **TagCleaner.cmd**. При первом запуске он скачает Python 3.12, библиотеки, FFmpeg и Chromaprint. Понадобится интернет, несколько минут и около 1 ГБ свободного места. Установка выполняется внутри папки приложения.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Portable remixer tag access without changing artist or title credits."""
 from mutagen.easyid3 import EasyID3
 from mutagen.easymp4 import EasyMP4Tags

@@ -16,36 +16,14 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 
 from mutagen import File
-from mutagen.id3 import ID3, APIC, TextFrame
-from mutagen.flac import FLAC, Picture
-from mutagen.mp4 import MP4, MP4Cover
+from mutagen.id3 import ID3, TextFrame
+from core.cover_tags import pictures, set_front_cover
 from core.cache_utils import atomic_write_json, file_signature, stable_digest, mark_file_changed
 from core.singleflight import cached_singleflight
 
 MAX_IMAGE = 16 * 1024 * 1024
 _analysis_lock=threading.RLock()
 _analysis_cache={}
-
-
-def pictures(audio):
-    if audio is None:
-        raise ValueError('Не удалось прочитать аудиофайл.')
-    if isinstance(audio, FLAC):
-        return [p.data for p in sorted(audio.pictures,key=lambda p:p.type!=3) if p.data]
-    tags = audio.tags
-    if tags is None:
-        return []
-    if isinstance(tags, ID3):
-        return [p.data for p in sorted(tags.getall('APIC'),key=lambda p:p.type!=3) if p.data]
-    if isinstance(audio, MP4):
-        return [bytes(p) for p in tags.get('covr', []) if p]
-    result = []
-    decoded=[Picture(base64.b64decode(p)) for p in tags.get('metadata_block_picture', [])]
-    for p in sorted(decoded,key=lambda p:p.type!=3):
-        result.append(p.data)
-    for p in tags.get('coverart', []):
-        result.append(base64.b64decode(p))
-    return [p for p in result if p]
 
 
 def image_info(blob):
@@ -893,27 +871,7 @@ class CoverSession:
             raise ValueError('Файл изменился во время создания резервной копии. Обновите папку.')
         try:
             mark_file_changed(data['path'])
-            if audio.tags is None: audio.add_tags()
-            if isinstance(audio.tags, ID3):
-                for old in list(audio.tags.getall('APIC')):
-                    if old.type in (0,3): del audio.tags[old.HashKey]
-                description='TagCleaner front cover'
-                while 'APIC:'+description in audio.tags:description+=' '
-                audio.tags.add(APIC(encoding=3, mime=info['mime'], type=3, desc=description, data=blob))
-            elif isinstance(audio, FLAC):
-                p = Picture(); p.type = 3; p.mime = info['mime']; p.width = info['width']; p.height = info['height']; p.data = blob
-                retained = [old for old in audio.pictures if old.type not in (0,3)]
-                audio.clear_pictures()
-                for old in retained: audio.add_picture(old)
-                audio.add_picture(p)
-            elif isinstance(audio, MP4):
-                audio['covr'] = [MP4Cover(blob, imageformat=MP4Cover.FORMAT_JPEG if info['mime']=='image/jpeg' else MP4Cover.FORMAT_PNG), *list(audio.tags.get('covr',[]))[1:]]
-            else:
-                p = Picture(); p.type = 3; p.mime = info['mime']; p.width = info['width']; p.height = info['height']; p.data = blob
-                retained = [value for value in audio.tags.get('metadata_block_picture',[]) if Picture(base64.b64decode(value)).type not in (0,3)]
-                for key in ('coverart','coverartmime'):
-                    if key in audio.tags: del audio.tags[key]
-                audio['metadata_block_picture'] = [base64.b64encode(p.write()).decode('ascii'), *retained]
+            set_front_cover(audio, blob, info['mime'], info['width'], info['height'])
             audio.save()
             saved_audio = File(data['path'])
             if blob not in pictures(saved_audio): raise ValueError('Обложка не прошла проверку после записи.')

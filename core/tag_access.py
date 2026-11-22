@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 """The same field mapping for reading, writing and verifying supported containers."""
 from mutagen.id3 import ID3, Frames
 from core.extra_tags import read_remixer, write_remixer

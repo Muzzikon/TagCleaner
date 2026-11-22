@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application' version '9.4.1'
+    id 'com.chaquo.python' version '17.2.0'
+}
+
+android {
+    namespace 'io.github.muzzikon.tagcleaner'
+    compileSdk 37
+
+    defaultConfig {
+        applicationId 'io.github.muzzikon.tagcleaner'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0'
+        ndk { abiFilters 'arm64-v8a', 'x86_64' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets {
+        main.assets.srcDir(rootProject.file('licenses'))
+    }
+}
+
+def sharedPython = layout.buildDirectory.dir('generated/sharedPython')
+def stageSharedPython = tasks.register('stageSharedPython', Sync) {
+    from(rootProject.file('../core')) {
+        include 'tag_access.py', 'extra_tags.py', 'local_cleanup.py', 'cover_tags.py'
+        into 'core'
+    }
+    into sharedPython
+}
+
+chaquopy {
+    defaultConfig {
+        version = '3.14'
+        if (providers.environmentVariable('TAGCLEANER_BUILD_PYTHON').isPresent()) {
+            buildPython(providers.environmentVariable('TAGCLEANER_BUILD_PYTHON').get())
+        }
+        pip { install 'mutagen==1.48.1' }
+    }
+    sourceSets { main { srcDir(sharedPython.get().asFile) } }
+}
+
+tasks.configureEach {
+    if (name.startsWith('merge') && name.endsWith('PythonSources')) {
+        dependsOn(stageSharedPython)
+    }
+}

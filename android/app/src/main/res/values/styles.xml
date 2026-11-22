@@ -1,0 +1,17 @@
+<resources>
+    <style name="Theme.TagCleaner" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <color name="background">#161719</color>
+    <color name="surface">#222427</color>
+    <color name="outline">#3B3E43</color>
+    <color name="text">#F5F0EB</color>
+    <color name="muted">#C0BBBA</color>
+    <color name="accent">#F7AA76</color>
+    <color name="accent_text">#23150C</color>
+</resources>
